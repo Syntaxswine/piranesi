@@ -1,8 +1,14 @@
 # Carceri
 
+**Play it: <https://syntaxswine.github.io/carceri/>**
+
 An architectural block-building game, drawn as a copperplate etching, after
 Giovanni Battista Piranesi's *Carceri d'Invenzione* (1st state c. 1749–50,
 2nd state 1761).
+
+Drag sideways to turn, drag up and down to raise the view (the camera *shifts*;
+it cannot tilt — see below). `WASD` to walk, `Q`/`E` for height, click to build,
+right-click to take back. The plate is bitten when you stop moving.
 
 You place architectural blocks — piers, arches, vaults, stairs, catwalks,
 gantries, chains — on a 3-D lattice. The world is not shaded and then filtered;
