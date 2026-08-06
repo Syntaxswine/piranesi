@@ -1,5 +1,35 @@
 # Backlog
 
+> **Reconciled 2026-08-06 against the redirect.** Read
+> `HANDOFF-2026-08-06.md` first — the game changed shape and some items below
+> changed meaning with it.
+>
+> **Now live at the top of the list, ahead of everything here:**
+>
+> 0a. **The layer view** — build mode, current layer full, above ghosted, below
+> shadowed. Blocked on the open question in the handoff §8: *what does ghosted
+> mean in an ink medium?* Do not guess it.
+> 0b. **`ResizeObserver` on the stage.** The canvas sizes from an unsettled
+> layout and comes up 28×320 — the owner saw a blank page. One line.
+> 0c. **Mode switch**, build ↔ explore.
+> 0d. **Delete the dead files** (`blocks.js`, `modules.js`, `scenes.js`,
+> `main.js`) once the new game runs — not before; they are the only working
+> reference for how `World` and `Engraver` are driven.
+> 0e. **Block quality.** The composer works; the masses are plain boxes. They
+> want relief, wear and ornament, and six archetypes want to be ten. Check
+> `blockshot --run 3` joinery for every archetype.
+>
+> **Changed meaning:** items about hand-authored cubes and the sliced-vault tile
+> system (`modules.js`) are superseded — main blocks are *composed* now, not
+> authored. The slicing technique is still correct and worth reviving if a form
+> ever needs to be bigger than one block again; the code is in git history at
+> `5922993`.
+>
+> **Unchanged and still ranked below:** everything about the *drawing* — cast
+> shadows, staffage, the halo, the two states, ornament, irregularity, the
+> renderer refinements. Those were about the medium, and the medium did not
+> change.
+
 Ranked by how much Carceri each buys. Sources are five research briefs
 (etching craft, a census of the sixteen plates, the spatial scholarship, the NPR
 line-rendering literature, and precedents) plus an adversarial critic whose job

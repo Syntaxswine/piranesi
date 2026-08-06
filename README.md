@@ -1,14 +1,40 @@
-# Carceri
+# Piranesi
 
-**Play it: <https://syntaxswine.github.io/carceri/>**
+A peaceful block-building game, drawn as a copperplate etching, after Giovanni
+Battista Piranesi's *Carceri d'Invenzione* (1st state c. 1749–50, 2nd state
+1761).
 
-An architectural block-building game, drawn as a copperplate etching, after
-Giovanni Battista Piranesi's *Carceri d'Invenzione* (1st state c. 1749–50,
-2nd state 1761).
+You build one vast interior, a layer at a time, out of blocks that are over the
+top, imposing, and not remotely practical — a single cube may carry a tower and
+a staircase and an archway that do not agree with each other. Stack enough of
+them and you get the thing the Carceri are actually about: unsupported stairways
+snaking through a labyrinth.
 
-Drag sideways to turn, drag up and down to raise the view (the camera *shifts*;
-it cannot tilt — see below). `WASD` to walk, `Q`/`E` for height, click to build,
-right-click to take back. The plate is bitten when you stop moving.
+> ### ⚠ Mid-rewrite
+>
+> The game was redirected on 2026-08-06 from a free-flight 3-D builder to this
+> layer-by-layer one. **The published site still serves the old game**, and four
+> files in `js/` are dead. The block composer and both cameras are new and work;
+> the layer view and the UI are not built yet.
+>
+> **Start at [`docs/HANDOFF-2026-08-06.md`](docs/HANDOFF-2026-08-06.md).** It is
+> the keystone: what the game is, the laws, every trap already paid for, and the
+> one open question that should not be guessed.
+
+**Two modes.** *Build* is a rotatable three-quarter overhead view of the model —
+you place on one flat layer, the layer above is ghosted and the one below is
+shadowed. *Explore* puts you inside the space, where the camera never pitches
+and the picture is a plate.
+
+**Blocks are composed, not drawn.** A vocabulary of sub-blocks — pier, archway,
+stair, catwalk, balustrade, drum, gantry, chain — is assembled by seeded
+generation into main blocks. The player only ever handles main blocks. You
+cannot hand-author enough Piranesi cubes to keep a builder interesting; you can
+compose them from a dozen parts forever.
+
+**The one rule that makes it assemble** is the socket ladder: four deck levels
+are the only heights at which anything may cross a block boundary. Constrain the
+joins absolutely and let the middle of a block be as mad as it likes.
 
 You place architectural blocks — piers, arches, vaults, stairs, catwalks,
 gantries, chains — on a 3-D lattice. The world is not shaded and then filtered;
@@ -22,7 +48,33 @@ npm run shot       # pull an impression, headless, to docs/shots/
 
 ---
 
-## The cube
+## Composing a block
+
+```bash
+node tools/blockshot.mjs                  # a contact sheet of 12, with recipes
+node tools/blockshot.mjs --n 24 --cols 6
+node tools/blockshot.mjs --one 3          # one block, big
+node tools/blockshot.mjs --run 3          # three of the SAME block in a row
+```
+
+`--run` is the one that matters: blocks that look fine alone can still refuse to
+meet. And the recipes printed beside the sheet are how you tell a generator that
+has variety from one drawing the same block with the furniture moved.
+
+Six archetypes — gate, pier, vault, tower, well, span — carry three to five
+seeded attachments each. Fewer and a block is a component; more and it is soup.
+Piranesi's own density is roughly *one more thing than the space can take*.
+
+---
+
+## The cube system (superseded, kept for the technique)
+
+> Below describes the previous build's hand-authored 12 m cubes and its
+> slicing of forms larger than one cube. Main blocks are **composed** now, not
+> authored — but the slicing technique is correct and worth reviving if a form
+> ever needs to be bigger than one block again.
+
+### The cube
 
 **The cube is the unit of authorship.** A cube is 6 cells on a side — twelve
 metres — and it holds a whole detailed piece of architecture: piers with their
