@@ -275,12 +275,16 @@ function instances(world, catalog, blocks, faceId = 0) {
   const out = [];
   for (const b of blocks) {
     const def = catalog.get(b.id);
-    if (!def) continue;
-    const [ax, ay] = def.size;
-    const turn = turnY(b.rot, ax, ay);
+    // A drawable may carry its OWN mesh instead of naming a catalogue entry.
+    // That is how a fitting gets drawn: an anchor's ring or torch belongs to no
+    // lattice cell — it hangs on the face of one — so it is built in world
+    // coordinates and handed straight to the renderer.  See anchors.js.
+    const mesh = b.mesh || (def && def.mesh);
+    if (!mesh) continue;
+    const [ax, ay] = b.size || def.size;
+    const turn = turnY(b.rot || 0, ax, ay);
     const move = translate(b.x, b.y, b.z);
     const xf = (p) => move(turn(p));
-    const mesh = def.mesh;
 
     // THE STROKE SEED IS THE BLOCK'S PLACE IN THE WORLD, NOT ITS PLACE IN A LIST.
     //
@@ -293,7 +297,12 @@ function instances(world, catalog, blocks, faceId = 0) {
     // drawing shivers.  So the seed is derived from where the block actually
     // stands and which of its own faces this is; a face keeps its handwriting
     // for as long as it keeps its address.
-    const blockSeed = hash32(b.x * 73856093, b.y * 19349663, b.z * 83492791);
+    // `seedAt` lets a drawable that sits at the origin still have a place in
+    // the world for the purposes of the hand.  Without it every fitting in the
+    // building would be drawn with identical wobble, because they all live at
+    // (0,0,0) and the seed is the address.
+    const sa = b.seedAt || [b.x, b.y, b.z];
+    const blockSeed = hash32(sa[0] * 73856093, sa[1] * 19349663, sa[2] * 83492791);
     const verts = mesh.verts.map(xf);
     const faces = mesh.faces.map((f, localIndex) => {
       const rot = (d) => {
@@ -575,6 +584,9 @@ export class Engraver {
     const bandOf = O.bandOf || (() => null);
     const solid = [], ghost = [];
     for (const b of world.blocks.values()) (bandOf(b) > 0 ? ghost : solid).push(b);
+    // Extra drawables — fittings — join their band by position, so a torch on a
+    // ghosted layer is ghosted with it.
+    for (const b of O.extra || []) (bandOf(b) > 0 ? ghost : solid).push(b);
 
     const A = instances(world, catalog, solid, 0);
     const cancelled = cancelCoincident(A.list);

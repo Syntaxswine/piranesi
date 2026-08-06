@@ -13,7 +13,7 @@
 // they meet.
 
 import { Camera, DEG, projectWith } from './math.js';
-import { SUB, METRES_PER_SUB } from './compose.js';
+import { SUB, METRES_PER_SUB } from './cube.js';
 
 export const LAYER = SUB;
 export const BUILD = 'build';

@@ -89,6 +89,24 @@
     background: #2e2c28; border: 1px solid #3d3a34; border-bottom-width: 2px;
     border-radius: 2px; padding: 0 3px; font: inherit; color: var(--ground);
   }
+
+  /* The anchor picker.  Small, dark, and it appears where you clicked — it is
+     a question about one square inch of wall, not a dialog. */
+  #picker {
+    position: fixed; z-index: 20; min-width: 132px;
+    background: var(--panel); border: 1px solid #4a4640;
+    border-radius: 3px; padding: 3px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.55);
+  }
+  #picker .kind {
+    display: block; width: 100%; text-align: left;
+    padding: 4px 7px; margin: 0; border: 0; border-radius: 2px;
+    background: transparent; color: var(--ground); font: inherit; cursor: pointer;
+  }
+  #picker .kind:hover { background: #34312c; }
+  #picker .kind.on { background: var(--hot); }
+  #picker .note { display: block; color: var(--rule); font-size: 9px; }
+  #picker .kind.on .note { color: #e6d9cf; }
 </style>
 </head>
 <body data-mode="build">
@@ -116,7 +134,8 @@
         <kbd>Q</kbd><kbd>E</kbd> turn the view ·
         <kbd>R</kbd> turn the block ·
         <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> pan<br>
-        click to place · right-click to take back · <kbd>Tab</kbd> to walk in
+        click to place · right-click to take back · <kbd>Tab</kbd> to walk in<br>
+        click a <span style="color:#b02e1a">red square</span> to set an anchor
       </div>
       <div class="row">
         <button class="act" id="mode">build</button>

@@ -24,6 +24,8 @@ import {
 } from '../js/cube.js';
 import { FORMS } from '../js/forms.js';
 import { SAMPLE_OFFSETS } from '../js/solidity.js';
+import { buildCatalog as buildStack } from '../js/stack.js';
+import { survey, KIND_IDS } from '../js/anchors.js';
 
 const catalog = buildCatalog();
 
@@ -631,4 +633,99 @@ test('a rotated block keeps its light holes where its stone is not', () => {
   assert.ok(counts.every((c) => c === counts[0]),
     `a turn changed how much stone the block has: ${counts.join(', ')}`);
   assert.ok(counts[0] > 0 && counts[0] < SUB ** 3);
+});
+
+/* -------------------------------------------------------------- anchors -- */
+
+const stackCat = buildStack(16, 1);
+
+test('an anchor is a PLACE the block declares; its KIND is the player\'s', () => {
+  // "my gut says that what they are should be player selected.  start them off
+  // as a red cube that can be clicked on to select, none, torch, ring."
+  for (const d of stackCat.values()) {
+    for (const a of d.anchors || []) {
+      assert.equal(a.kind, null, `${d.id} shipped an anchor that had already decided it was a ${a.kind}`);
+    }
+  }
+  assert.deepEqual(KIND_IDS, ['none', 'ring', 'torch']);
+  // The kind lives on the WORLD, not the block: a definition is shared by every
+  // copy of it in the building, so setting a torch on one would light them all.
+  const w = new World(stackCat);
+  const id = [...stackCat.keys()].find((k) => (stackCat.get(k).anchors || []).length);
+  w.place(0, 0, 0, id);
+  w.place(0, LAYER * 3, 0, id);
+  const sites = survey(w, stackCat);
+  w.setAnchorKind(sites[0].id, 'torch');
+  const after = survey(w, stackCat);
+  assert.equal(after.filter((s) => s.kind === 'torch').length, 1,
+    'setting one anchor set every copy of that block');
+});
+
+test('a wall in front of an anchor makes it unviable, and taking it away brings it back', () => {
+  // "if a solid brick wall with an anchor point has another solid wall placed
+  // in front of that anchor point it wont even be visible because it wont be
+  // considered a viable point so you don't have to render it."
+  const id = [...stackCat.keys()].find((k) => (stackCat.get(k).anchors || []).length);
+  const solidId = 'b0';
+  const w = new World(stackCat);
+  w.place(0, 0, 0, id);
+
+  const before = survey(w, stackCat).filter((s) => s.viable);
+  assert.ok(before.length, 'the test block has no viable anchors to begin with');
+
+  // Wall it in on all four sides.
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    w.place(dx * LAYER, dy * LAYER, 0, solidId);
+  }
+  const walled = survey(w, stackCat).filter((s) => s.viable);
+  assert.ok(walled.length < before.length,
+    `walling the block in changed nothing: ${before.length} viable before and after`);
+
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    w.remove(dx * LAYER, dy * LAYER, 0);
+  }
+  const freed = survey(w, stackCat).filter((s) => s.viable);
+  assert.equal(freed.length, before.length, 'the sites did not come back when the walls did');
+});
+
+test('a turned block carries its anchors round with it', () => {
+  // The world position comes from the SAME quarter-turn the mesh gets.  Derive
+  // it any other way and a turned block ends up with its torches on the wrong
+  // wall — which looks entirely plausible until you turn the block back.
+  const id = [...stackCat.keys()].find((k) => (stackCat.get(k).anchors || []).length);
+  const seen = new Set();
+  for (const rot of [0, 1, 2, 3]) {
+    const w = new World(stackCat);
+    w.place(0, 0, 0, id, rot);
+    for (const s of survey(w, stackCat)) {
+      // The site must still be ON its own block, whatever the turn.
+      assert.ok(s.p[0] >= -1e-9 && s.p[0] <= LAYER + 1e-9, `x ${s.p[0]} left the block at rot ${rot}`);
+      assert.ok(s.p[1] >= -1e-9 && s.p[1] <= LAYER + 1e-9, `y ${s.p[1]} left the block at rot ${rot}`);
+      // …and its normal must point straight out of the face it names.
+      const n = s.n;
+      assert.ok(Math.abs(Math.hypot(n[0], n[1]) - 1) < 1e-9, 'the normal stopped being a unit vector');
+      seen.add(s.side);
+    }
+  }
+  assert.ok(seen.size > 1, 'every turn put the anchors on the same side; the rotation is a no-op');
+});
+
+test('a save keeps what the player chose, and a removed block forgets it', () => {
+  const id = [...stackCat.keys()].find((k) => (stackCat.get(k).anchors || []).length);
+  const w = new World(stackCat);
+  w.place(0, 0, 0, id);
+  const s = survey(w, stackCat)[0];
+  w.setAnchorKind(s.id, 'ring');
+
+  const back = World.fromJSON(stackCat, JSON.parse(JSON.stringify(w.toJSON())));
+  assert.equal(back.anchorKind(s.id), 'ring', 'the choice did not survive a save');
+
+  // And the choices must load AFTER the blocks: `place` forgets the anchors at
+  // its own address, so loading them first would have the building erase them
+  // as it went up.
+  assert.equal(survey(back, stackCat).find((x) => x.id === s.id).kind, 'ring');
+
+  w.remove(0, 0, 0);
+  assert.equal(w.anchorKind(s.id), undefined,
+    'a removed block left its settings behind for whatever is put there next');
 });

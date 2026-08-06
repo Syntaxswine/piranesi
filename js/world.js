@@ -112,6 +112,20 @@ export class World {
     this.solid = new Map();
     /** cell key → anchor key, FITTING only. */
     this.fittings = new Map();
+    /**
+     * ANCHOR SITE ID → the kind the player chose ('none' | 'ring' | 'torch').
+     *
+     * Kept on the WORLD and not on the block, because a block definition is
+     * shared by every copy of it in the building — set a torch on one and the
+     * whole catalogue entry would light up.  Keyed by the site's own stable
+     * name (block position plus its index), so it survives a save, a reload and
+     * a quarter-turn.
+     *
+     * A site the player has never touched is absent, which is different from
+     * one set to 'none': absent means "still a red cube, still asking", and
+     * 'none' means "asked and answered".
+     */
+    this.anchors = new Map();
     /** Bumped on every mutation.  The renderer watches it to know the plate is
      *  stale — a plate is re-bitten when the building changes, not redrawn
      *  every frame.  See engrave.js. */
@@ -217,6 +231,7 @@ export class World {
 
   removeBlock(b) {
     const anchor = anchorKey(b.layer, b.x, b.y, b.z);
+    this.forgetAnchorsAt(b);
     const map = this.mapFor(b.layer);
     this.blocks.delete(anchor);
     for (const [cx, cy, cz] of this.footprint(b.x, b.y, b.z, b.id, b.rot)) {
@@ -228,7 +243,26 @@ export class World {
 
   clear() {
     this.blocks.clear(); this.occupancy.clear(); this.fittings.clear();
-    this.solid.clear(); this.revision++;
+    this.solid.clear(); this.anchors.clear(); this.revision++;
+  }
+
+  /* ------------------------------------------------------------ anchors -- */
+
+  anchorKind(id) { return this.anchors.get(id); }
+
+  setAnchorKind(id, kind) {
+    if (kind == null) this.anchors.delete(id);
+    else this.anchors.set(id, kind);
+    this.revision++;
+    return kind;
+  }
+
+  /** Forget the choices made on a block that is no longer there.  Without this
+   *  a save accumulates settings for sites that do not exist, and — worse —
+   *  putting a different block back in the same place inherits them. */
+  forgetAnchorsAt(b) {
+    const stem = `${anchorKey(b.layer, b.x, b.y, b.z)}#`;
+    for (const k of this.anchors.keys()) if (k.startsWith(stem)) this.anchors.delete(k);
   }
 
   bounds() {
@@ -252,7 +286,10 @@ export class World {
     const cells = [...this.blocks.values()]
       .sort((a, b) => a.z - b.z || a.y - b.y || a.x - b.x)
       .map((c) => (c.rot ? [c.x, c.y, c.z, c.id, c.rot] : [c.x, c.y, c.z, c.id]));
-    return { format: 'carceri/1', cells };
+    const anchors = [...this.anchors.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+    return anchors.length
+      ? { format: 'piranesi/2', cells, anchors }
+      : { format: 'piranesi/2', cells };
   }
 
   static fromJSON(catalog, data) {
@@ -260,6 +297,9 @@ export class World {
     for (const [x, y, z, id, rot] of data.cells || []) {
       if (catalog.has(id)) w.place(x, y, z, id, rot || 0);
     }
+    // AFTER the blocks, always: `place` calls `forgetAnchorsAt`, so loading the
+    // choices first would have the building erase them as it went up.
+    for (const [id, kind] of data.anchors || []) w.anchors.set(id, kind);
     return w;
   }
 }

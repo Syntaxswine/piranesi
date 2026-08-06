@@ -22,8 +22,10 @@
 //    pixels and no hatching.
 
 import { World } from './world.js';
-import { buildCatalog, SUB } from './compose.js';
-import { Camera } from './math.js';
+import { buildCatalog } from './stack.js';
+import { SUB } from './cube.js';
+import { survey, fittingAt, KINDS } from './anchors.js';
+import { Camera, projectWith } from './math.js';
 import { Engraver } from './engrave.js';
 import {
   LAYER, BUILD, EXPLORE, bandFor, buildCamera, exploreCamera,
@@ -59,6 +61,10 @@ const state = {
   quality: 'proof',
   settleAt: 0,
   stats: null,
+  /** Anchor sites, resurveyed whenever the building changes.  See anchors.js. */
+  sites: [],
+  sitesAt: -1,
+  picking: null,                     // the site whose menu is open
 };
 
 const camera = new Camera({});
@@ -121,14 +127,40 @@ function aim(width, height) {
  * broken layer switch.  I lost a round to that.  Anything that has to be
  * verified must be callable, not only schedulable.
  */
+/**
+ * Resurvey the anchor sites, but only when the building has actually changed.
+ *
+ * Whole-sweep rather than incremental, and cheap enough to be: placing a block
+ * can bury or expose sites on any neighbour, removing one can expose sites two
+ * blocks away through a bore, and an incremental update that is wrong leaves a
+ * torch burning inside a wall with nothing to say so.
+ */
+function resurvey() {
+  if (state.sitesAt === state.world.revision) return;
+  state.sites = survey(state.world, catalog);
+  state.sitesAt = state.world.revision;
+  state.fittings = state.sites
+    .filter((s) => s.viable && s.kind && s.kind !== 'none')
+    .map((s) => {
+      const m = fittingAt(s);
+      return m && {
+        x: 0, y: 0, z: 0, rot: 0, size: [1, 1, 1], mesh: m,
+        seedAt: s.p.map(Math.round), layer: 'fitting',
+      };
+    })
+    .filter(Boolean);
+}
+
 function bite(quality = state.quality) {
   if (!sized) return null;
+  resurvey();
   const eng = quality === 'plate' ? full : draft;
   aim(eng.width, eng.height);
   state.stats = eng.render(state.world, camera, catalog, {
     hatching: eng === full,
     coursing: eng === full,
     lines: true,
+    extra: state.fittings,
     // In explore mode you are INSIDE the building and every layer is real
     // stone.  Banding is a property of the drawing board, not of the world.
     bandOf: state.mode === BUILD ? bandFor(state.layer) : null,
@@ -176,6 +208,63 @@ function paste(img) {
 function present() {
   ctx.drawImage(sheet, 0, 0);
   if (state.mode === BUILD) board();
+  markers();
+}
+
+/**
+ * THE RED CUBES.  "start them off as a red cube that can be clicked on to
+ * select, none, torch, ring."
+ *
+ * Chrome, not geometry, and that is the whole design.  An unset anchor is a
+ * question the editor is asking, so it must be crisp at any zoom, must be
+ * clickable, and must not cost a re-bite of the plate when the mouse moves.
+ * The moment the player answers, it stops being a question and becomes a ring
+ * or a torch bitten into the plate like any other stone.
+ *
+ * DEPTH-TESTED AGAINST THE STENCIL, so a wall in front of it hides it — which
+ * is the same rule as viability, applied to the eye instead of to the lattice.
+ */
+function markers() {
+  const eng = state.quality === 'plate' ? full : draft;
+  const depth = eng.depth;
+  // The camera is aimed at the CANVAS, so a projection comes back in canvas
+  // pixels; the stencil is the engraver's, which may be a fraction of that.
+  const k = eng.width / canvas.width;
+  const c = camera.snapshot();
+  hits.length = 0;
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  for (const s of state.sites) {
+    if (!s.viable || (s.kind && s.kind !== 'none')) continue;
+    const q = projectWith(c, s.p[0], s.p[1], s.p[2]);
+    if (q[2] <= 0) continue;
+    // Test the depth a little way OUT of the wall, or the marker occludes
+    // itself against the very face it is bolted to.
+    const t = projectWith(c, s.p[0] + s.n[0] * 0.6, s.p[1] + s.n[1] * 0.6, s.p[2]);
+    if (!depth.visible(t[0] * k, t[1] * k, t[2])) continue;
+    const r = 5;
+    hits.push({ site: s, x: q[0], y: q[1], r: r + 4 });
+    ctx.fillStyle = state.picking === s ? 'rgba(206, 74, 44, 0.96)' : 'rgba(176, 46, 26, 0.80)';
+    ctx.strokeStyle = 'rgba(28, 18, 14, 0.85)';
+    ctx.lineWidth = 1;
+    ctx.fillRect(q[0] - r, q[1] - r, r * 2, r * 2);
+    ctx.strokeRect(q[0] - r + 0.5, q[1] - r + 0.5, r * 2 - 1, r * 2 - 1);
+  }
+  ctx.restore();
+}
+
+/** Screen-space hit boxes for the markers, rebuilt every time they are drawn.
+ *  Picking a marker is a screen-space question — the player is aiming at a
+ *  square on the glass, not at a point in the world. */
+const hits = [];
+
+function markerAt(x, y) {
+  let best = null, bd = Infinity;
+  for (const h of hits) {
+    const d = Math.hypot(h.x - x, h.y - y);
+    if (d <= h.r && d < bd) { bd = d; best = h.site; }
+  }
+  return best;
 }
 
 /**
@@ -277,6 +366,14 @@ canvas.addEventListener('pointerdown', (e) => {
     return;
   }
   if (state.mode !== BUILD) return;
+
+  // A MARKER BEATS A PLACEMENT.  An anchor sits on a wall you can also build
+  // against, so if the two ever compete the click has to go to the smaller,
+  // more deliberate target — you do not hit a five-pixel red square by accident.
+  const m = markerAt(sx, sy);
+  if (m && e.button !== 2) { openPicker(m, sx, sy); return; }
+  closePicker();
+
   const c = pickCell(camera, sx, sy, state.layer);
   if (!c) return;
   const [gx, gy] = c;
@@ -362,6 +459,59 @@ function setMode(m) {
 }
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+/* -------------------------------------------------------------- the picker */
+
+/**
+ * The little menu that turns a red cube into something.
+ *
+ * "start them off as a red cube that can be clicked on to select, none, torch,
+ * ring.  there might be other options later" — so it is built from a LIST in
+ * anchors.js rather than three hard-wired buttons, and adding an alcove or a
+ * piece of wall art later is one entry there and no change here.
+ */
+function openPicker(site, sx, sy) {
+  closePicker();
+  state.picking = site;
+  const el = document.createElement('div');
+  el.id = 'picker';
+  const r = canvas.getBoundingClientRect();
+  el.style.left = `${r.left + sx + 10}px`;
+  el.style.top = `${r.top + sy - 8}px`;
+  for (const k of KINDS) {
+    const b = document.createElement('button');
+    b.className = 'kind' + (currentKind(site) === k.id ? ' on' : '');
+    b.innerHTML = `<span>${k.name}</span><span class="note">${k.note}</span>`;
+    b.onclick = (ev) => {
+      ev.stopPropagation();
+      state.world.setAnchorKind(site.id, k.id);
+      save();
+      closePicker();
+      invalidate(0);
+    };
+    el.append(b);
+  }
+  document.body.append(el);
+  present();
+}
+
+const currentKind = (s) => state.world.anchorKind(s.id) ?? 'none';
+
+function closePicker() {
+  const el = $('#picker');
+  if (el) el.remove();
+  state.picking = null;
+}
+
+addEventListener('pointerdown', (e) => {
+  // Anywhere that is not the menu closes it.  The canvas handler runs first and
+  // has already dealt with a click that landed on another marker.
+  if (!state.picking) return;
+  if (e.target.closest && e.target.closest('#picker')) return;
+  if (e.target === canvas) return;
+  closePicker();
+  present();
+}, true);
 
 /* --------------------------------------------------------------- the shelf */
 

@@ -284,7 +284,7 @@ function cutAt(profile) {
 /** Which boundary plane a face lies on, or null.  A post-pass, because a part
  *  has no idea where it was placed — the same reason `tagBoundaryFaces` in
  *  compose.js is a post-pass.  See handoff §3.4. */
-function sideOfFace(m, f) {
+export function sideOfFace(m, f) {
   const EPS = 1e-6;
   const planes = [['+x', 0, S], ['-x', 0, 0], ['+y', 1, S], ['-y', 1, 0], ['+z', 2, S], ['-z', 2, 0]];
   for (const [side, ax, at] of planes) {
@@ -298,7 +298,7 @@ function sideOfFace(m, f) {
 /** Tag every face that turns out to lie on a boundary plane, whatever built it.
  *  `sweep` already tags its caps; this catches the flanks of a form that runs
  *  out to an edge, which is most of them. */
-function tagFlat(m) {
+export function tagFlat(m) {
   for (const f of m.faces) if (!f.side) f.side = sideOfFace(m, f);
   return m;
 }
