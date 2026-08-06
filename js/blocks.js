@@ -105,6 +105,9 @@ export function voidedBay(m, { span, height, depth, y0 = 0, mat = 'stone', soffi
       u: [0, 1, 0], vDir: [dx / L, 0, dz / L],
       hatch: 'v',
       tag: 'intrados',
+      // The one surface in the catalogue that MUST keep its own frame: the
+      // strokes wrap the barrel, which is unmistakable in every plate.
+      form: true,
     });
   }
 
@@ -155,9 +158,9 @@ def({
 });
 
 def({
-  id: 'paving', name: 'Paving', family: 'mass', size: [1, 1, 1], rot: false,
-  note: 'A 0.5 m slab in the floor of the cell. Lay a field of them for a platform; they cancel edge to edge.',
-  build: (m) => box(m, [0, 0, 0], [1, 1, 0.25], { mat: 'stone', tag: 'paving', hatchTop: 'u' }),
+  id: 'paving', name: 'Paved ground', family: 'mass', size: [1, 1, 1], rot: false,
+  note: 'A whole cell of made ground. It FILLS the cell on purpose: a thin slab leaves three quarters of a cell of air under everything you stand on it, and a floor you cannot build flush with is not a floor. For a plate hanging in space use a landing.',
+  build: (m) => box(m, [0, 0, 0], [1, 1, 1], { mat: 'stone', tag: 'paving', hatchTop: 'u' }),
 });
 
 def({

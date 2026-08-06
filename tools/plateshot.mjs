@@ -69,8 +69,22 @@ const eng = new Engraver({ width: W, height: H, ss });
 const r = eng.render(world, cam, catalog, opts);
 const img = eng.plate.develop({ grain: Number(arg('--grain', '1')) });
 
+/** `--crop x,y,w,h` — cut a window out of the developed impression, so a fault
+ *  can be looked at at its own scale instead of guessed at from a thumbnail. */
+let final = img;
+const crop = arg('--crop', null);
+if (crop) {
+  const [cx, cy, cw, ch] = crop.split(',').map(Number);
+  const data = new Uint8ClampedArray(cw * ch * 4);
+  for (let y = 0; y < ch; y++) {
+    const src = ((cy + y) * img.width + cx) * 4;
+    data.set(img.data.subarray(src, src + cw * 4), y * cw * 4);
+  }
+  final = { data, width: cw, height: ch };
+}
+
 mkdirSync(dirname(out), { recursive: true });
-const bytes = writePNG(out, img.data, img.width, img.height);
+const bytes = writePNG(out, final.data, final.width, final.height);
 
 console.log(`${out}  ${W}x${H}@${ss}x  ${(bytes / 1024).toFixed(0)} kB`);
 console.log(`  blocks ${world.size}  faces ${r.faces}  cancelled ${r.cancelled}  hatch strokes ${r.hatchLines}`);

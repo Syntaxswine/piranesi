@@ -44,9 +44,25 @@ const NEAR = 0.08;
  *   3. The material's own bias.
  */
 const KEY = norm([-0.42, -0.66, 0.62]);
-const SKY_W = 0.46;
-const KEY_W = 0.42;
-const AMBIENT = 0.12;
+const SKY_W = 0.32;
+const KEY_W = 0.38;
+/**
+ * The bounce floor.  Direct visibility of the opening is ONE bounce, and one
+ * bounce says that a vaulted hall fifty metres long with arcade openings down
+ * its sides is uniformly black — which is true of the geometry and false of
+ * every interior anyone has ever drawn.  Light in a masonry room arrives mostly
+ * off other masonry.  Without this term the plate came back 71% near-black with
+ * a correctly calibrated hatcher underneath it, and the fault was two files
+ * upstream of where it showed.
+ */
+const AMBIENT_BOUNCE = 0.24;
+/** A little more for surfaces that can also see the opening directly — the
+ *  bounce is brighter near the light, which is what softens a shadow edge. */
+const AMBIENT_SKY = 0.12;
+/** How far the key ray travels before it has escaped the building.  Longer than
+ *  the sky reach: the sky only has to clear the vault, the key has to get out
+ *  of a hall fifty metres long. */
+const KEY_REACH = 22;
 
 /** Directions the sky is sampled along: straight up, and a ring leaning out.
  *  Six is enough — the term wants to be soft, and a hard shadow from a skylight
@@ -63,7 +79,44 @@ const SKY_RAYS = (() => {
 })();
 
 const SKY_REACH = 11;     // cells to march before declaring the sky found
-const SKY_STEP = 0.62;
+
+/**
+ * Exact voxel traversal (Amanatides & Woo): visit every cell the ray actually
+ * passes through, in order, and no others.
+ *
+ * THE FIXED-STEP VERSION OF THIS WAS A BUG AND IT LOOKED LIKE ART.  Sampling a
+ * lattice every 0.62 cells means a ray running near a cell corner alternately
+ * lands inside and outside it, so a shadow boundary breaks up into stripes —
+ * and the plate came back with broad pale bands radiating from the vanishing
+ * point down the walls and across the floor, which read entirely plausibly as
+ * shafts of light through the arcade.  They were sampling artefacts.  A ray
+ * that steps through a grid must step CELL BY CELL; there is no tolerance that
+ * makes a fixed stride correct, only strides that alias more slowly.
+ *
+ * @returns true if something other than `self` blocks the ray.
+ */
+function marchBlocked(occ, px, py, pz, dx, dy, dz, maxDist, self) {
+  let cx = Math.floor(px), cy = Math.floor(py), cz = Math.floor(pz);
+  const sx = dx > 0 ? 1 : -1, sy = dy > 0 ? 1 : -1, sz = dz > 0 ? 1 : -1;
+  const ax = Math.abs(dx), ay = Math.abs(dy), az = Math.abs(dz);
+  const dtx = ax > 1e-9 ? 1 / ax : Infinity;
+  const dty = ay > 1e-9 ? 1 / ay : Infinity;
+  const dtz = az > 1e-9 ? 1 / az : Infinity;
+  let tx = ax > 1e-9 ? (dx > 0 ? cx + 1 - px : px - cx) / ax : Infinity;
+  let ty = ay > 1e-9 ? (dy > 0 ? cy + 1 - py : py - cy) / ay : Infinity;
+  let tz = az > 1e-9 ? (dz > 0 ? cz + 1 - pz : pz - cz) / az : Infinity;
+
+  for (let guard = 0; guard < 512; guard++) {
+    const hit = occ.get(`${cx},${cy},${cz}`);
+    if (hit !== undefined && hit !== self) return true;
+    if (tx < ty) {
+      if (tx < tz) { cx += sx; if (tx > maxDist) return false; tx += dtx; }
+      else { cz += sz; if (tz > maxDist) return false; tz += dtz; }
+    } else if (ty < tz) { cy += sy; if (ty > maxDist) return false; ty += dty; }
+    else { cz += sz; if (tz > maxDist) return false; tz += dtz; }
+  }
+  return false;
+}
 
 /**
  * March the lattice and return how much of the opening this point can see.
@@ -78,20 +131,36 @@ const SKY_STEP = 0.62;
 function skyVisibility(world, p, n, self) {
   let seen = 0, total = 0;
   const occ = world.occupancy;
+  const ox = p[0] + n[0] * 0.03, oy = p[1] + n[1] * 0.03, oz = p[2] + n[2] * 0.03;
   for (const [dx, dy, dz, wgt] of SKY_RAYS) {
     const face = dx * n[0] + dy * n[1] + dz * n[2];
     if (face <= 0.02) continue;                 // the ray is behind the surface
     const w = wgt * face;
     total += w;
-    let blocked = false;
-    for (let t = 0.35; t < SKY_REACH; t += SKY_STEP) {
-      const k = `${Math.floor(p[0] + n[0] * 0.02 + dx * t)},${Math.floor(p[1] + n[1] * 0.02 + dy * t)},${Math.floor(p[2] + n[2] * 0.02 + dz * t)}`;
-      const hit = occ.get(k);
-      if (hit !== undefined && hit !== self) { blocked = true; break; }
-    }
-    if (!blocked) seen += w;
+    if (!marchBlocked(occ, ox, oy, oz, dx, dy, dz, SKY_REACH, self)) seen += w;
   }
   return total > 0 ? seen / total : 0;
+}
+
+/**
+ * Can the key light actually reach this point?
+ *
+ * THE KEY HAS TO TRAVEL.  Weighting a lambert term by "how enclosed the surface
+ * is" seems reasonable and is not: inside a hall every surface is enclosed, so
+ * the key gets damped to nothing everywhere and the whole plate comes back one
+ * even grey — which is what the third plate pulled from this renderer looked
+ * like.  Piranesi's light is not ambient.  It comes IN, through an arch, at an
+ * angle, and it lands on some things and not others; the bright wall opposite an
+ * opening and the black wall beside it are the same wall.
+ *
+ * So the key is a shadow ray, marched through the same lattice.  One ray per
+ * sample point, three sample points per face, blended — which also gives the
+ * shadow a soft edge for free, and a hard-edged shadow is not an etching.
+ */
+function keyVisibility(world, p, n, self) {
+  return marchBlocked(world.occupancy,
+    p[0] + n[0] * 0.03, p[1] + n[1] * 0.03, p[2] + n[2] * 0.03,
+    KEY[0], KEY[1], KEY[2], KEY_REACH, self) ? 0 : 1;
 }
 
 /** Sky at three points spread up the face, so a WALL GETS A GRADIENT.
@@ -113,21 +182,26 @@ function skyProfile(world, inst, f, self) {
     return [p[0] + (cen[0] - p[0]) * 0.22, p[1] + (cen[1] - p[1]) * 0.22, p[2] + (cen[2] - p[2]) * 0.22];
   };
   const pts = hiZ - loZ < 1e-3 ? [cen] : [pull(loI), cen, pull(hiI)];
-  return pts.map((p) => ({ p, sky: skyVisibility(world, p, f.n, self) }));
+  const facesKey = f.n[0] * KEY[0] + f.n[1] * KEY[1] + f.n[2] * KEY[2] > 0.02;
+  return pts.map((p) => ({
+    p,
+    sky: skyVisibility(world, p, f.n, self),
+    key: facesKey ? keyVisibility(world, p, f.n, self) : 0,
+  }));
 }
 
-/** Inverse-distance blend of a face's sky samples at an arbitrary point. */
-function skyAt(samples, p) {
-  if (samples.length === 1) return samples[0].sky;
-  let num = 0, den = 0;
+/** Inverse-distance blend of a face's light samples at an arbitrary point. */
+function lightAt(samples, p) {
+  if (samples.length === 1) return samples[0];
+  let num = 0, kum = 0, den = 0;
   for (const s of samples) {
     const dx = p[0] - s.p[0], dy = p[1] - s.p[1], dz = p[2] - s.p[2];
     const d = dx * dx + dy * dy + dz * dz;
-    if (d < 1e-6) return s.sky;
+    if (d < 1e-6) return s;
     const w = 1 / d;
-    num += s.sky * w; den += w;
+    num += s.sky * w; kum += s.key * w; den += w;
   }
-  return num / den;
+  return { sky: num / den, key: kum / den };
 }
 
 /**
@@ -139,21 +213,34 @@ function skyAt(samples, p) {
  * the middle registers used sparingly and mostly on receding planes.  So the
  * tone is pushed away from the middle before it ever reaches the hatcher.
  */
-function faceTone(n, mat, fog, sky) {
-  const key = Math.max(0, n[0] * KEY[0] + n[1] * KEY[1] + n[2] * KEY[2]);
-  // The key is a beam of light: it cannot reach a surface the sky cannot reach.
-  const lum = SKY_W * sky + KEY_W * key * (0.25 + 0.75 * sky) + AMBIENT * sky;
+function faceTone(n, mat, fog, sky, keyVis) {
+  const lambert = Math.max(0, n[0] * KEY[0] + n[1] * KEY[1] + n[2] * KEY[2]);
+  // The bounce is not isotropic: an upward-facing surface sees more of the room
+  // and more of whatever the room is lit by, so it keeps a share of the sky
+  // term's shape even where it can see no sky at all.
+  const bounce = AMBIENT_BOUNCE * (0.62 + 0.38 * (n[2] + 1) * 0.5);
+  const lum = SKY_W * sky + KEY_W * lambert * keyVis + bounce + AMBIENT_SKY * sky;
   let t = 1 - lum;
   t += MATERIALS[mat] ? MATERIALS[mat].tone : 0;
 
   // Contrast about a pivot below the middle — the darks are the subject.
-  const P = 0.44, K = 2.35;
+  //
+  // THIS CURVE USED TO BE MUCH HARDER, on the assumption that a Carceri is
+  // bimodal: bare paper against solid black.  Block-histogram measurement of
+  // real impressions says that is wrong.  A first-state plate lands near
+  // bare 1%, light 16%, MID 40%, dark 38%, very dark 5%, solid 0% — mean
+  // reflectance 0.46, ink coverage 55%.  It is a mid-and-dark object with
+  // almost no bare paper and no true solids at all.  (The second state is the
+  // one that is more than half black: median reflectance 0.11.)  So the curve
+  // firms the contrast without evacuating the middle.
+  const P = 0.44, K = 1.45;
   t = t < P ? P * Math.pow(Math.max(0, t) / P, K) : 1 - (1 - P) * Math.pow((1 - t) / (1 - P), K);
 
-  // Aerial perspective.  In a pure line medium this is not haze, it is the
-  // etcher simply putting fewer and finer lines into the distance; the far
-  // arcade of Plate VII is almost bare paper.  So distance pulls tone DOWN.
-  t *= 1 - fog * 0.78;
+  // Aerial perspective is applied in the HATCHER, by taking away families and
+  // thinning the needle — not here.  Fading tone toward the paper is a grey
+  // ramp, and an etched line is either bitten or it is not.  A little is kept
+  // here only to stop the deep distance filling in.
+  t *= 1 - fog * 0.22;
   return t < 0 ? 0 : t > 1 ? 1 : t;
 }
 
@@ -178,8 +265,9 @@ function instances(world, catalog) {
         return [q[0] - a[0], q[1] - a[1], q[2] - a[2]];
       };
       return {
-        v: f.v, mat: f.mat, tag: f.tag, side: f.side, tone: f.tone,
+        v: f.v, mat: f.mat, tag: f.tag, side: f.side, tone: f.tone, form: !!f.form,
         n: rot(f.n), hatchDir: rot(f.hatchDir),
+        uW: rot(f.uAxis), vW: rot(f.vAxis),
         id: faceId++,
         block: b,
         /** buried against a neighbour's face — the surface CONTINUES here */
@@ -324,14 +412,16 @@ function fillPoly(depth, poly, A, B, C, id) {
 /* ============================================================== the engraver */
 
 export const DEFAULTS = {
-  /** Screen spacing, in output pixels, that the sparsest hatch layer aims for.
-   *  Below about 2.6 the registers stop being distinguishable at all; above
-   *  about 4 the plate reads as a wireframe with stripes on it. */
-  hatchTarget: 3.2,
-  /** Bare paper below this tone.  Piranesi leaves a LOT of paper — a lit pier
-   *  in Plate VII carries its contour and a few joints and nothing else. */
-  paperBelow: 0.125,
-  hatchWidth: 0.78,
+  /** THE PITCH, in output pixels, held constant across the whole tonal range.
+   *  Measured at ~0.80 mm on a 545 mm plate, i.e. plate width / 680; at 900 px
+   *  wide that is 1.3 px, which is below what a raster can hold, so the game
+   *  runs a coarser grain and keeps the RATIO that matters — tone is width over
+   *  pitch, and that is scale-free. */
+  pitchPx: 2.7,
+  /** Bare paper below this tone.  Kept LOW: a first-state plate is about 1%
+   *  bare paper.  Bare paper is an override (the etcher's stopped-out white),
+   *  not the default state of a lit surface. */
+  paperBelow: 0.045,
   creaseWidth: 1.15,
   silhouetteWidth: 1.9,
   courseWidth: 0.72,
@@ -351,6 +441,9 @@ export class Engraver {
     this.width = width;
     this.height = height;
     this.ss = ss;
+    /** tone → duty table, and scratch for the per-stroke family weights. */
+    this._duty = buildDutyTable();
+    this._fw = new Float32Array(LAYERS.length);
   }
 
   resize(width, height) {
@@ -418,23 +511,41 @@ export class Engraver {
         draw.push({ inst, f });
       }
     }
+    // WHAT SURVIVED THE STENCIL.  A face can pass every cull, rasterise
+    // perfectly, and still contribute nothing because a nearer wall covers all
+    // of it — and in a building most faces are exactly that.  One sweep of the
+    // id buffer says which ids actually reached the paper, and everything else
+    // skips its light rays, its hatching and its coursing entirely.  In a hall
+    // this is most of the scene.
+    const seen = new Set(this.depth.id);
+    const visible = draw.filter(({ f }) => seen.has(f.id));
     const tStencil = now();
 
     /* ---- 4 & 5 & 6 ------------------------------------------------------- */
     let hatchLines = 0;
     if (O.hatching || O.coursing) {
-      for (const { inst, f } of draw) {
+      for (const { inst, f } of visible) {
         const fog = clamp01(f.zavg / O.fogDepth);
         // Must match world.js's anchor key exactly, or every ray is blocked by
         // the block it started from and the whole world renders black.
         const self = `${inst.block.layer || 'structure'}|${inst.block.x},${inst.block.y},${inst.block.z}`;
         f.skySamples = O.sky === false
-          ? [{ p: faceCentroid(inst, f), sky: 0.62 }]
+          ? [{ p: faceCentroid(inst, f), sky: 0.62, key: 1 }]
           : skyProfile(world, inst, f, self);
-        let mean = 0;
-        for (const s of f.skySamples) mean += s.sky / f.skySamples.length;
-        f.toneValue = faceTone(f.n, f.mat, fog, mean) + (f.tone || 0);
-        f.toneAt = (p) => clamp01(faceTone(f.n, f.mat, fog, skyAt(f.skySamples, p)) + (f.tone || 0));
+        let mSky = 0, mKey = 0;
+        for (const s of f.skySamples) { mSky += s.sky / f.skySamples.length; mKey += s.key / f.skySamples.length; }
+        if (O.forceTone != null) {
+          // The tone-verification harness drives this: every face takes one
+          // known value so the achieved ink can be measured against intent.
+          f.toneValue = O.forceTone;
+          f.toneAt = () => O.forceTone;
+        } else {
+          f.toneValue = faceTone(f.n, f.mat, fog, mSky, mKey) + (f.tone || 0);
+          f.toneAt = (p) => {
+            const L = lightAt(f.skySamples, p);
+            return clamp01(faceTone(f.n, f.mat, fog, L.sky, L.key) + (f.tone || 0));
+          };
+        }
         if (O.hatching) hatchLines += this.hatch(inst, f, c, f.toneValue, fog, O);
         if (O.coursing) this.course(inst, f, c, f.toneValue, fog, O);
       }
@@ -444,7 +555,7 @@ export class Engraver {
     const tLines = now();
 
     return {
-      faces: draw.length, cancelled, hatchLines,
+      faces: draw.length, visible: visible.length, cancelled, hatchLines,
       ms: { stencil: tStencil - t0, tone: tTone - tStencil, lines: tLines - tTone, total: tLines - t0 },
       ink: this.plate.meanInk(),
     };
@@ -563,7 +674,10 @@ export class Engraver {
     if (tone <= O.paperBelow) return 0;
     if (f.screenArea < 6) return 0;
 
-    const n = f.n, hd = f.hatchDir;
+    const n = f.n;
+    // A face that has a form to describe keeps its own frame; every other face
+    // takes the hand's angle.  See the LAYERS comment.
+    const hd = f.form ? f.hatchDir : (inPlaneAtScreenAngle(inst, f, c, PRIMARY_DEG) || f.hatchDir);
     const perp = norm(cross(n, hd));
     const p0 = inst.verts[f.v[0]];
     const d = p0[0] * n[0] + p0[1] * n[1] + p0[2] * n[2];
@@ -585,72 +699,104 @@ export class Engraver {
     const pxPerUnit = Math.hypot(s2[0] - s1[0], s2[1] - s1[1]) / 0.1;
     if (!(pxPerUnit > 1e-4)) return 0;
 
-    let spacing = 0.0625;                          // 12.5 cm — the finest register
-    let guard = 0;
-    while (spacing * pxPerUnit < O.hatchTarget && guard++ < 24) spacing *= 2;
-    while (spacing * pxPerUnit > O.hatchTarget * 2 && guard++ < 24) spacing *= 0.5;
+    // THE PITCH IS CONSTANT, and it is chosen in SCREEN pixels: an engraving's
+    // grain belongs to the plate, not to the building, so the hatch must be the
+    // same fineness on a near pier as on a far one.  The world spacing that
+    // achieves it is quantised to a root-two ladder rather than taken exactly,
+    // so that two coplanar faces at slightly different depths land on the SAME
+    // set of world lines and the hatching runs unbroken across the join.  A
+    // continuous spacing would break every block boundary in the building.
+    const want = O.pitchPx / pxPerUnit;
+    const R2 = Math.SQRT2;
+    let spacing = Math.pow(R2, Math.round(Math.log(want) / Math.log(R2)));
+    if (!(spacing > 0) || !isFinite(spacing)) return 0;
 
-    let tMax = 0;
-    for (const s of f.skySamples) tMax = Math.max(tMax, f.toneAt(s.p));
+    // Aerial perspective is a BITE-DEPTH ramp, not a grey ramp: distance takes
+    // away layers and thins the needle.  It must never fade the ink toward the
+    // paper — an etched line is either bitten or it is not.
+    const maxFamilies = fog < 0.34 ? 3 : fog < 0.68 ? 2 : 1;
+    const widthScale = (1 - fog * 0.55);
+
     let count = 0;
-    for (let li = 0; li < LAYERS.length; li++) {
+    for (let li = 0; li < LAYERS.length && li < maxFamilies; li++) {
       const L = LAYERS[li];
-      if (tMax <= L.th) break;
-      // Later layers cross at a shallow angle.  Never 90°: a right-angle cross
-      // reads as woven cloth and moirés against the pixel grid.  Etchers cross
-      // at something like 30–60° and so do we.
-      const ang = L.ang;
-      const ca = Math.cos(ang), sa = Math.sin(ang);
-      const hd2 = [hd[0] * ca + perp[0] * sa, hd[1] * ca + perp[1] * sa, hd[2] * ca + perp[2] * sa];
-      const pp2 = [-hd[0] * sa + perp[0] * ca, -hd[1] * sa + perp[1] * ca, -hd[2] * sa + perp[2] * ca];
-      const sp = spacing * L.mul;
+      if (tone < L.at) break;
 
-      // Re-express the polygon for this layer's direction.
-      const q = pts.map(([a, b]) => [a * ca + b * sa, -a * sa + b * ca]);
+      // Each family gets its own world direction, solved so that it PROJECTS at
+      // the family's screen angle.  For a form-describing face the first family
+      // is the surface's own, and the others are taken square to it in the
+      // surface, so the wrap of a vault survives its own cross-hatching.
+      // ONLY THE FIRST FAMILY DESCRIBES THE FORM.  Taking the cross square to
+      // the wrap on a barrel vault gives "along the tunnel" x "round the
+      // barrel", which is a perfect rectangular grid and reads as basketwork —
+      // the vault came back looking woven.  Piranesi wraps the vault with his
+      // first layer and then darkens it with the same 40-degree hand he uses
+      // everywhere else.  So: family 0 keeps the surface frame, families 1 and
+      // 2 take the plate angle whether the face has a form or not.
+      const hd2 = (f.form && li === 0)
+        ? hd
+        : (inPlaneAtScreenAngle(inst, f, c, L.deg) || hd);
+      const pp2 = norm(cross(n, hd2));
+
+      const q = planeCoords(inst, f, origin, hd2, pp2);
       let lo = Infinity, hi = -Infinity;
       for (const p of q) { if (p[1] < lo) lo = p[1]; if (p[1] > hi) hi = p[1]; }
-      const k0 = Math.ceil(lo / sp), k1 = Math.floor(hi / sp);
+      const k0 = Math.ceil(lo / spacing), k1 = Math.floor(hi / spacing);
       if (k1 - k0 > O.maxLinesPerFace) continue;
 
       for (let k = k0; k <= k1; k++) {
-        const bb = k * sp;
+        const bb = k * spacing;
         const span = spanAt(q, bb);
         if (!span) continue;
         let [a0, a1] = span;
-        if (a1 - a0 < sp * 0.35) continue;          // a nub, not a stroke
+        if (a1 - a0 < spacing * 0.3) continue;       // a nub, not a stroke
 
         // --- how dark is it JUST HERE? ------------------------------------
-        // Every line asks the face's own light profile where it lies, so a
-        // register fades in across a surface instead of switching on all at
-        // once.  This is the difference between a wall that is lit and a wall
-        // that is filled: the light falls off along it and the hatching
-        // thins out with it.
+        // Every stroke asks the face's own light profile where it lies, so the
+        // needle swells and thins ALONG a wall as the light falls off it.  One
+        // width per face makes every surface a flat panel of even tone, which
+        // is the thing no etching has.
         const am = (a0 + a1) / 2;
-        const mid = [
+        const tLoc = f.toneAt([
           origin[0] + hd2[0] * am + pp2[0] * bb,
           origin[1] + hd2[1] * am + pp2[1] * bb,
           origin[2] + hd2[2] * am + pp2[2] * bb,
-        ];
-        const tLoc = f.toneAt(mid);
-        const density = clamp01((tLoc - L.th) / (L.next - L.th));
-        if (density <= 0.001) continue;
-        // Thin the layer by DROPPING LINES from a dense set, not by spreading
-        // them: the golden-ratio sequence spaces the survivors evenly, so a
-        // half-density passage looks like a wider hatch rather than a gappy
-        // one, and no two adjacent lines ever vanish together.
-        if (density < 0.999 && frac(k * 0.6180339887498949 + li * 0.37) >= density) continue;
+        ]);
+        // This family's own share at this point: zero until its tone is
+        // reached, then ramping in over FAMILY_RAMP.
+        familyWeights(tLoc, this._fw);
+        const share = this._fw[li];
+        if (share <= 0.002) continue;
 
-        // The hand, part two.  Strokes do not all begin and end on the same
-        // line: an etcher's hatch block has a ragged edge, and the raggedness
-        // is most of what distinguishes drawn tone from a fill pattern.
-        const bite = (a1 - a0);
-        a0 += bite * 0.07 * hashf(f.id, k, li);
-        a1 -= bite * 0.07 * hashf(f.id, k, li + 97);
+        const base = this._duty.table[Math.round(clamp01(tLoc) * this._duty.N)];
+        const width = base * share * O.pitchPx * widthScale;
+        if (width < 0.16) continue;
+
+        // The hand: an etcher's hatch block has a ragged edge, and the
+        // raggedness is most of what distinguishes drawn tone from a fill
+        // pattern.  IT IS AN ABSOLUTE AMOUNT, NOT A PERCENTAGE — as a
+        // percentage it was 7% of each stroke, which on a one-cell face is two
+        // pixels and on a wall four cells long is a finger's width, so every
+        // block boundary in the building came back as a pale gutter and the
+        // lattice was visible in the drawing.
+        const bite = (0.8 + 2.2 * hashf(f.id, k, li)) / pxPerUnit;
+        const bite2 = (0.8 + 2.2 * hashf(f.id, k, li + 97)) / pxPerUnit;
+        if (a1 - a0 > (bite + bite2) * 2.5) { a0 += bite; a1 -= bite2; }
         if (a1 <= a0) continue;
 
+        // A THIN LINE IS A FLICK; A WIDE ONE IS A TROUGH.  Taper is what makes
+        // sparse hatching read as drawn rather than ruled, but carrying it into
+        // the dark registers costs ~23% of every stroke's ink, and that is
+        // exactly where the plate has none to spare — the transfer curve went
+        // flat at 0.83 and the darkest passages could not get darker however
+        // hard they were asked.  A line bitten until it is nearly as wide as
+        // the gap beside it is blunt at both ends, which is also what it looks
+        // like on the copper.
+        const bluntness = clamp01(width / O.pitchPx);
         this.strokeHatch(origin, hd2, pp2, a0, a1, bb, c, {
-          width: O.hatchWidth * L.w * (1 - fog * 0.34),
-          strength: L.s,
+          width,
+          strength: 0.95 + 0.05 * bluntness,
+          taper: 0.72 * (1 - bluntness),
           seed: (f.id * 131 + k * 7 + li) | 0,
           arc: (hashs(f.id, k, li + 41)) * 0.010 * (a1 - a0),
         });
@@ -683,7 +829,7 @@ export class Engraver {
 
     let run = null;
     const flush = () => {
-      if (run && run.length >= 4) P.stroke(run, opt.width * ss, opt.strength, 0.7);
+      if (run && run.length >= 4) P.stroke(run, opt.width * ss, opt.strength, opt.taper ?? 0.7);
       run = null;
     };
     for (let i = 0; i <= steps; i++) {
@@ -716,7 +862,7 @@ export class Engraver {
     // In the deep registers the hatching has already eaten the joints; drawing
     // them anyway just adds ink with no information in it.
     if (tone > 0.80) return;
-    if (Math.abs(f.n[2]) > 0.75) return;         // a paved floor, not a wall face
+    if (Math.abs(f.n[2]) > 0.75) return this.flags(inst, f, c, tone, fog, O);
     const H = { ashlar: 0.25, rustic: 0.375, brick: 0.075 }[spec.course];
     if (!H) return;
 
@@ -795,6 +941,56 @@ export class Engraver {
     }
   }
 
+  /**
+   * Flagstones on a horizontal surface.
+   *
+   * Worth its own method rather than being folded into `course`, because a
+   * paved floor is doing a completely different job in the picture.  A wall's
+   * joints are texture; a FLOOR'S joints are the perspective — two families of
+   * lines converging on the vanishing points are the strongest depth cue in a
+   * Carceri and the reason you believe the hall is a hundred feet long.  They
+   * run on the WORLD grid, at whole cell divisions, so the pattern is continuous
+   * across every slab in the floor and the lattice never shows.
+   */
+  flags(inst, f, c, tone, fog, O) {
+    if (f.n[2] < 0.75) return;                    // a soffit, not a floor
+    const S = 0.5;                                // one flag is a metre square
+    const cen = faceCentroid(inst, f);
+    const s1 = projectWith(c, cen[0], cen[1], cen[2]);
+    const s2 = projectWith(c, cen[0] + S, cen[1], cen[2]);
+    const s3 = projectWith(c, cen[0], cen[1] + S, cen[2]);
+    if (s1[2] <= 0 || s2[2] <= 0 || s3[2] <= 0) return;
+    // Gate each family separately: a floor stretching to the horizon has legible
+    // joints across it long after the joints along it have closed up.
+    const pxX = Math.hypot(s2[0] - s1[0], s2[1] - s1[1]);
+    const pxY = Math.hypot(s3[0] - s1[0], s3[1] - s1[1]);
+    const origin = [0, 0, cen[2]];
+    const w = O.courseWidth * (1 - fog * 0.5);
+    const strength = 0.40 * (1 - fog * 0.55);
+
+    for (const [dir, other, px, tag] of [
+      [[1, 0, 0], [0, 1, 0], pxY, 0],
+      [[0, 1, 0], [1, 0, 0], pxX, 1],
+    ]) {
+      if (px < 4.6) continue;
+      const every = px < 9.5 ? 2 : 1;
+      const pts = planeCoords(inst, f, origin, dir, other);
+      let lo = Infinity, hi = -Infinity;
+      for (const p of pts) { if (p[1] < lo) lo = p[1]; if (p[1] > hi) hi = p[1]; }
+      const k0 = Math.ceil(lo / S), k1 = Math.floor(hi / S);
+      if (k1 - k0 > 200) continue;
+      for (let k = k0; k <= k1; k++) {
+        if (every === 2 && (k & 1)) continue;
+        const span = spanAt(pts, k * S);
+        if (!span) continue;
+        for (const [a0, a1] of brokenSpan(span[0], span[1], (k * 71 + tag * 13) | 0)) {
+          this.strokeHatch(origin, dir, other, a0, a1, k * S, c,
+            { width: w, strength, seed: (k * 313 + tag) | 0, arc: 0 });
+        }
+      }
+    }
+  }
+
   /** Timber grain: long strokes with the member, irregularly spaced. */
   grain(inst, f, c, O, fog) {
     if (fog > 0.6) return;
@@ -834,29 +1030,117 @@ export class Engraver {
  * smoothly so the steps between registers do not band.
  */
 /**
- * THE REGISTER LADDER — the most consequential table in the repo.
+ * THE REGISTER LADDER — the most consequential table in the repo, and the one
+ * place where measurement beat intuition outright.
  *
- * Tone does not become "denser lines" continuously.  It becomes MORE LAYERS,
- * each laid at an angle to the last, which is why an etching's darks have
- * texture and a halftone's do not.  Each layer holds a fixed spacing and comes
- * in by having more and more of its lines actually drawn, from `th` to `next` —
- * so a register fades in over a passage instead of switching on at a contour.
+ * The intuitive design, which this renderer shipped first, was: hold the stroke
+ * thin, and make a passage darker by packing the lines closer and by adding
+ * layers at angles chosen to avoid a right-angle cross.  It produced a plate
+ * that read as woven mesh.
  *
- * The angles are not a spread of the circle.  A layer crossing its predecessor
- * at 90° reads as woven cloth and beats against the pixel grid; etchers cross at
- * something like 30–60°, and the fourth layer here comes back close to the first
- * (20°) because that is what you do when you simply need more black.
+ * Structure-tensor and autocorrelation measurements taken off high-resolution
+ * museum scans of five Carceri plates across both editions say otherwise, and
+ * they say it very clearly:
+ *
+ *   1. THE PITCH IS CONSTANT.  About 0.80 mm on a 545 mm plate, essentially
+ *      flat across the whole tonal range.  Piranesi does not close the spacing
+ *      to go dark.
+ *   2. THE STROKE THICKENS.  Duty cycle — ink width over pitch — climbs from
+ *      about 0.25 in the lights to 0.86 in the darks.  THAT is the tone knob.
+ *      It is also what the plate physically is: the same needle-work bitten
+ *      longer in acid opens wider.
+ *   3. THE CROSS IS SQUARE.  The second family sits 88-96 degrees off the
+ *      first, not the shallow 30-60 degrees of reproductive engraving.  The
+ *      moire argument agrees: at 90 degrees the beat period is 0.71 of the
+ *      pitch — finer than the hatching, therefore invisible — while a 20-degree
+ *      cross beats at 2.9 pitches, which is exactly the visible mesh.
+ *   4. THERE IS A DOMINANT PLATE-WIDE ANGLE: 40 degrees below horizontal,
+ *      descending to the right, holding 53-66% of all oriented line energy.
+ *      The hand has a stroke direction and it uses it nearly everywhere.
+ *
+ * (4) is a real correction to the "hatch describes the form" principle this
+ * renderer was built on, so the two are reconciled rather than one discarded:
+ * a face that has a FORM to describe — the intrados of a vault, the flank of a
+ * drum, the grain of a baulk — keeps its own surface frame, because Piranesi
+ * visibly wraps those.  Every flat face instead takes the in-plane direction
+ * that PROJECTS closest to 40 degrees.  That direction depends on the camera,
+ * which is exactly right: a plate is drawn for one view, and moving the camera
+ * here is pulling a different plate.
  */
 const D2R = Math.PI / 180;
+
+/** Screen angles of the three families, measured with y DOWN, so a positive
+ *  angle descends to the right — a backslash, as measured. */
+const PRIMARY_DEG = 40;
 const LAYERS = [
-  { ang: 0 * D2R, mul: 0.98, w: 1.00, s: 0.90, th: 0.10, next: 0.34 },
-  { ang: 54 * D2R, mul: 1.02, w: 0.90, s: 0.84, th: 0.32, next: 0.58 },
-  { ang: -34 * D2R, mul: 1.00, w: 0.86, s: 0.80, th: 0.56, next: 0.80 },
-  { ang: 20 * D2R, mul: 0.62, w: 0.86, s: 0.86, th: 0.78, next: 0.93 },
-  { ang: -68 * D2R, mul: 0.55, w: 0.92, s: 0.92, th: 0.90, next: 1.04 },
+  { deg: PRIMARY_DEG, at: 0.045 },        // always, once past bare paper
+  { deg: PRIMARY_DEG + 90, at: 0.50 },    // the square cross
+  { deg: 88, at: 0.78 },                  // near-vertical, darkest register only
 ];
 
-const frac = (v) => v - Math.floor(v);
+/**
+ * How strongly each family is present at a given tone.
+ *
+ * A FAMILY FADES IN; IT DOES NOT SWITCH ON.  The first version of this had a
+ * hard threshold, and the tone harness caught what the pictures could not: at
+ * tone 0.44 one family ran at duty 0.44, and at tone 0.50 two families ran at
+ * duty 0.29 each — so asking for a DARKER passage produced a LIGHTER plate, by
+ * a tenth of the range, right in the middle of the tonal scale where every wall
+ * in the building lives.  The transfer curve was not monotonic and nothing in
+ * the image said so; it just looked like a decision somebody had made.
+ */
+const FAMILY_RAMP = 0.16;
+function familyWeights(t, out) {
+  for (let i = 0; i < LAYERS.length; i++) {
+    const w = (t - LAYERS[i].at) / FAMILY_RAMP;
+    out[i] = w < 0 ? 0 : w > 1 ? 1 : w;
+  }
+  return out;
+}
+
+/**
+ * The common duty `d` such that families of duty d·wᵢ together cover
+ * `coverage`:  1 − Π(1 − d·wᵢ) = coverage.
+ *
+ * Crossed families overlap, so two of duty d cover 2d − d², not 2d.  Getting
+ * this wrong is why naive cross-hatching goes black the moment it crosses.
+ * There is no closed form once the weights differ, so it is bisected — twenty
+ * iterations of three multiplies, done once per tone step into a table.
+ */
+function solveDuty(coverage, w) {
+  if (coverage <= 0) return 0;
+  let lo = 0, hi = 0.985;
+  for (let i = 0; i < 20; i++) {
+    const m = (lo + hi) * 0.5;
+    let p = 1;
+    for (let j = 0; j < w.length; j++) if (w[j] > 0) p *= 1 - m * w[j];
+    if (1 - p < coverage) lo = m; else hi = m;
+  }
+  return (lo + hi) * 0.5;
+}
+
+/**
+ * A drawn stroke does not deposit the ink its width implies.  It is tapered at
+ * both ends, its ends are bitten back by a pixel or two to keep the hatch block
+ * ragged, and it is laid at 95% strength — so the geometric duty over-promises.
+ * MEASURED with tools/tonecheck.mjs, not derived: the whole point of that tool
+ * is that every analytic estimate in this literature drifts.  Re-measure after
+ * any change to the stroke rasteriser or the taper.
+ */
+const STROKE_EFFICIENCY = 0.84;
+
+/** Per-render table: tone → per-family duty multiplier. */
+function buildDutyTable() {
+  const N = 128;
+  const table = new Float32Array(N + 1);
+  const w = new Float32Array(LAYERS.length);
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    familyWeights(t, w);
+    table[i] = solveDuty(Math.min(0.985, t / STROKE_EFFICIENCY), w);
+  }
+  return { table, N };
+}
 
 /** Break a joint into 1–3 drawn stretches with gaps.  See `course`. */
 function brokenSpan(a0, a1, seed) {
@@ -882,6 +1166,37 @@ function faceCentroid(inst, f) {
   for (const i of f.v) { const p = inst.verts[i]; x += p[0]; y += p[1]; z += p[2]; }
   const k = 1 / f.v.length;
   return [x * k, y * k, z * k];
+}
+
+/**
+ * The direction lying IN a face's plane whose screen projection runs at
+ * `deg` below the horizontal (y down, so positive descends to the right).
+ *
+ * Any in-plane direction is a·u + b·v, and projection is linear in a
+ * neighbourhood, so project one small step of u and one of v and solve for the
+ * combination parallel to the wanted screen vector.  Returns null when the face
+ * is too edge-on for the answer to mean anything, and the caller falls back to
+ * the surface's own frame.
+ */
+function inPlaneAtScreenAngle(inst, f, c, deg) {
+  const o = faceCentroid(inst, f);
+  const s0 = projectWith(c, o[0], o[1], o[2]);
+  if (s0[2] <= 0) return null;
+  const e = 0.05;
+  const U = f.uW || f.hatchDir;
+  const V = f.vW || norm(cross(f.n, U));
+  const su = projectWith(c, o[0] + U[0] * e, o[1] + U[1] * e, o[2] + U[2] * e);
+  const sv = projectWith(c, o[0] + V[0] * e, o[1] + V[1] * e, o[2] + V[2] * e);
+  if (su[2] <= 0 || sv[2] <= 0) return null;
+  const pux = su[0] - s0[0], puy = su[1] - s0[1];
+  const pvx = sv[0] - s0[0], pvy = sv[1] - s0[1];
+  const th = deg * D2R, ct = Math.cos(th), st = Math.sin(th);
+  // Cross product of (a·pu + b·pv) with (ct, st) set to zero.
+  const a = -(pvx * st - pvy * ct);
+  const b = (pux * st - puy * ct);
+  if (Math.abs(a) + Math.abs(b) < 1e-9) return null;
+  const d = norm([U[0] * a + V[0] * b, U[1] * a + V[1] * b, U[2] * a + V[2] * b]);
+  return isFinite(d[0]) ? d : null;
 }
 
 /** A face's vertices in the (a,b) coordinates of a given in-plane frame. */

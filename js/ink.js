@@ -24,14 +24,22 @@
 
 /* ------------------------------------------------------------- materials -- */
 
-/** Warm ivory laid paper.  Piranesi's impressions are on cream/ivory laid stock,
- *  not white; a white ground makes the ink read as blue-black and kills it. */
-export const PAPER = [232, 223, 202];
+/** Warm cream laid paper, sampled off museum scans: about #F2E6CF inside the
+ *  platemark.  Not white — a white ground makes the ink read as blue-black and
+ *  kills it — but not the tea-stained brown people reach for either. */
+export const PAPER = [242, 230, 207];
 
-/** The ink is a warm brown-black, never [0,0,0].  A pure black ink flattens the
- *  darks into a hole in the sheet — the dark of an etching is *layered line*,
- *  and it keeps a colour. */
-export const INK = [34, 26, 20];
+/**
+ * The ink is a WARM NEAR-BLACK, and the thing to resist is rendering Piranesi in
+ * sepia.  Measurement off real impressions: about #2C2316 where the film is
+ * thin, #232019 where it is dense — that is, the ink gets *warmer as it gets
+ * thinner*, red-minus-blue falling from +22 to +10 as density rises.  So the
+ * two ends are given separately and `develop` interpolates between them by how
+ * much ink is actually on the pixel.  A single flat ink colour is the tell that
+ * somebody picked brown out of a swatch.
+ */
+export const INK = [44, 35, 22];
+export const INK_DENSE = [35, 32, 25];
 
 /** Plate tone: the film of ink the printer leaves on the plate surface outside
  *  the bitten lines.  Tiny, global, and the reason a real impression is never
@@ -205,6 +213,7 @@ export class Plate {
     const tone = opts.plateTone ?? PLATE_TONE;
     const paper = opts.paper || PAPER;
     const ink = opts.ink || INK;
+    const dense = opts.inkDense || INK_DENSE;
     const px = new Uint8ClampedArray(w * h * 4);
     const inv = 1 / (ss * ss);
 
@@ -231,10 +240,13 @@ export class Plate {
           p = 1 + (laid + chain + (fibre / 255 - 0.5) * 0.014) * grain;
         }
 
+        // The ink warms as it thins: blend the two measured ink colours by how
+        // much of this pixel is actually inked.
+        const d = 1 - t;
         const i = (y * w + x) * 4;
-        px[i] = paper[0] * p * t + ink[0] * (1 - t);
-        px[i + 1] = paper[1] * p * t + ink[1] * (1 - t);
-        px[i + 2] = paper[2] * p * t + ink[2] * (1 - t);
+        px[i] = paper[0] * p * t + (ink[0] + (dense[0] - ink[0]) * d) * d;
+        px[i + 1] = paper[1] * p * t + (ink[1] + (dense[1] - ink[1]) * d) * d;
+        px[i + 2] = paper[2] * p * t + (ink[2] + (dense[2] - ink[2]) * d) * d;
         px[i + 3] = 255;
       }
     }

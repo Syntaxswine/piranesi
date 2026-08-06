@@ -77,6 +77,19 @@ export class Mesh {
       side: o.side || null,
       tag: o.tag || '',
       tone: o.tone ?? 0,
+      /**
+       * FORM.  Set on a face that belongs to a curved or directional surface —
+       * the intrados of a vault, the flank of a drum, the grain of a baulk.
+       * Those keep their own (u,v) frame when hatched, so the strokes wrap the
+       * barrel and run with the timber.
+       *
+       * Everything else is FLAT, and a flat face lets the engraver's hand pick
+       * the angle: measurement of the plates puts 53-66% of all line energy in
+       * one family at 40 degrees, which no per-surface frame would ever
+       * produce.  Marking a flat wall `form` makes it hatch along its own
+       * height, and a building of those reads as corduroy.
+       */
+      form: !!o.form,
     };
     this.faces.push(f);
     return f;
@@ -261,7 +274,7 @@ export function sweep(m, profile, axis, s0, s1, o = {}) {
     vDir[axis === 'x' ? 0 : 1] = 0;
     m.face([A[i], A[j], B[j], B[i]], {
       mat, u: along, vDir, hatch: o.hatch ?? 'v', tag: o.tag,
-      side: o.side || null,
+      side: o.side || null, form: o.form !== false,
     });
   }
   if (o.caps !== false && closed) {
@@ -326,6 +339,7 @@ export function lathe(m, cx, cy, profile, seg = 16, o = {}) {
         vDir: [0, 0, 1],
         hatch: o.hatch ?? 'v',
         tag: o.tag,
+        form: o.form !== false,
       });
     }
   }
@@ -363,7 +377,7 @@ export function strut(m, p0, p1, r, o = {}) {
   for (let i = 0; i < 4; i++) {
     const j = (i + 1) % 4;
     // u runs along the member — so `hatch: 'u'` gives grain, 'v' gives banding.
-    m.face([A[i], A[j], B[j], B[i]], { mat, u: d, vDir: i % 2 ? b : a, hatch: o.hatch ?? 'u', tag: o.tag || 'strut' });
+    m.face([A[i], A[j], B[j], B[i]], { mat, u: d, vDir: i % 2 ? b : a, hatch: o.hatch ?? 'u', tag: o.tag || 'strut', form: true });
   }
   m.face(A.slice().reverse(), { mat, u: a, vDir: b, hatch: 'u', tag: o.tag || 'strut' });
   m.face(B.slice(), { mat, u: a, vDir: b, hatch: 'u', tag: o.tag || 'strut' });
