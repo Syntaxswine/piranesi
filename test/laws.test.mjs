@@ -18,7 +18,10 @@ import { bandTone, bandLine, stoneRange } from '../js/palette.js';
 import { stoneAt } from '../js/stone.js';
 import { buildCatalog as buildCatalog2 } from '../js/compose.js';
 import { bandFor, buildCamera, LAYER } from '../js/build.js';
-import { SUB, SUB_FEET, BLOCK_FEET, BLOCK_METRES, R, R_WHOLE, onPlane } from '../js/cube.js';
+import {
+  SUB, SUB_YARDS, SUB_FEET, BLOCK_YARDS, BLOCK_FEET, BLOCK_METRES,
+  METRES_PER_SUB, R, R_WHOLE, onPlane,
+} from '../js/cube.js';
 import { FORMS } from '../js/forms.js';
 import { SAMPLE_OFFSETS } from '../js/solidity.js';
 
@@ -447,15 +450,21 @@ test('the stone skin draws no hatching at all, and the engraver still can', () =
 
 /* ------------------------------------------------------------ the cube law */
 
-test('the cube law: two radii, nine planes, and 9x9x9 sub-blocks to a block', () => {
+test('the cube law: two radii, nine planes, and a block of nine yards cubed', () => {
   // The owner's spec of 2026-08-06, pinned as numbers so a later "tidy-up" of
   // the constants has to argue with it.  Every one was read off his diagram and
   // agreed with the photograph to better than 1.5% of the block's width; the
   // UNIT was the one thing the drawing could not settle, and he settled it —
   // "its actually 9x9 blocks if you want to get technical."
+  // "the blocks are 9 yards cubed if i am not mistaken."  A SUB-BLOCK IS ONE
+  // YARD, which is why every number in his spec is a small round one, and the
+  // international yard is 0.9144 m by definition so nothing here is rounded.
   assert.equal(SUB, 9, 'the block is nine sub-blocks on a side');
-  assert.equal(SUB_FEET, 3, 'a sub-block is three feet');
+  assert.equal(SUB_YARDS, 1, 'a sub-block is one yard');
+  assert.equal(SUB_FEET, 3);
+  assert.equal(BLOCK_YARDS, 9);
   assert.equal(BLOCK_FEET, 27);
+  assert.equal(METRES_PER_SUB, 0.9144, 'the international yard, exactly');
   assert.ok(Math.abs(BLOCK_METRES - 8.2296) < 1e-4, `the block came out ${BLOCK_METRES} m`);
   // "the one whole block circle of 4.5" — in a block of nine that is exactly
   // half, so its circle is inscribed and tangent to all four faces.  If this
@@ -469,8 +478,8 @@ test('the cube law: two radii, nine planes, and 9x9x9 sub-blocks to a block', ()
   }
   // And the reason his unit is the right one: this form is "mostly for making
   // high vaulted arches", so its span has to be a vault and not a doorway.
-  const span = R_WHOLE * 2 * SUB_FEET;
-  assert.equal(span, 27, `the whole-block arch spans ${span} ft`);
+  const span = R_WHOLE * 2;
+  assert.equal(span, BLOCK_YARDS, `the whole-block arch spans ${span} yd, not the block's ${BLOCK_YARDS}`);
   assert.ok(1.75 / BLOCK_METRES < 0.25, 'a man must be a small fraction of a block');
 });
 

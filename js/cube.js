@@ -16,6 +16,13 @@
 //    mostly be used for making high vaulted arches.  each sub block is about 3'
 //    cubed.  by making slices happen at the colored lines it makes it easier to
 //    find pieces that line up."
+//   "its actually 9x9 blocks if you want to get technical."
+//   "the blocks are 9 yards cubed if i am not mistaken."
+//
+// THE UNIT IS THE YARD, and saying it that way makes the whole system fall out
+// in one line: A SUB-BLOCK IS ONE YARD; A MAIN BLOCK IS NINE YARDS CUBED.  His
+// "about 3' cubed" is the same number said in feet, and 0.9144 m is a yard
+// exactly, so the metric figures below are conversions rather than choices.
 //
 // WHAT THE DIAGRAM MEASURES.  He drew a block in section on graph paper with
 // four colours.  Reading the drawing back as numbers, in SUB-BLOCKS from a
@@ -49,9 +56,12 @@
 
 /** Sub-blocks along one edge of a main block.  "its actually 9x9 blocks". */
 export const SUB = 9;
-/** Feet per sub-block. */
+/** A SUB-BLOCK IS ONE YARD.  The lattice unit and the imperial unit are the
+ *  same thing, which is why every number in the spec is a small round one. */
+export const SUB_YARDS = 1;
 export const SUB_FEET = 3;
-/** Feet per main block. */
+/** A MAIN BLOCK IS NINE YARDS CUBED. */
+export const BLOCK_YARDS = SUB * SUB_YARDS;            // 9
 export const BLOCK_FEET = SUB * SUB_FEET;              // 27
 
 /**
@@ -64,7 +74,9 @@ export const BLOCK_FEET = SUB * SUB_FEET;              // 27
  * something (a handrail is 3 feet high, not 1 sub-block).
  */
 export const FOOT = 1 / SUB_FEET;
-export const METRES_PER_SUB = 0.9144;                   // 3 ft, exactly
+/** One yard, exactly — the international yard is 0.9144 m by definition, so
+ *  nothing here is rounded. */
+export const METRES_PER_SUB = 0.9144;
 export const BLOCK_METRES = SUB * METRES_PER_SUB;       // 8.2296 m — a man is 0.21 of it
 
 /* ----------------------------------------------------------------- radii -- */
@@ -72,26 +84,26 @@ export const BLOCK_METRES = SUB * METRES_PER_SUB;       // 8.2296 m — a man is
 /**
  * THE TWO RADII.  There are no others, and that is the whole of the rule.
  *
- * R is 2.5 sub-blocks — seven and a half feet, 2.29 m — and it does shafts,
- * engaged columns, corner rounds, niches and the ribs of a cross vault.
- * R_WHOLE is 4.5, which in a block of 9 is exactly half, so its circle is
- * inscribed and tangent to all four faces at their midpoints.  That is the one
- * he means for high vaulted arches: twenty-seven feet of span, eight and a
- * quarter metres, the largest arc a single block can hold — and a run of them
- * is a barrel a man is a fifth as tall as.
+ * R is two and a half YARDS — 2.29 m — and it does shafts, engaged columns,
+ * corner rounds, niches and the ribs of a cross vault.  R_WHOLE is four and a
+ * half, which in a block of nine is exactly half, so its circle is inscribed
+ * and tangent to all four faces at their midpoints.  That is the one he means
+ * for high vaulted arches: NINE YARDS OF SPAN, eight and a quarter metres, the
+ * largest arc a single block can hold — and a run of them is a barrel a man is
+ * a fifth as tall as.
  *
  * Because R_WHOLE is exactly SUB/2, an arch struck with it
  * springs and crowns ON the boundary planes, so two neighbours agree at the
  * seam by construction — the same property that made the old sliced-vault tiles
  * cancel their cut faces, recovered without slicing anything.
  */
-export const R = 2.5;                                   // 7.5 ft, 2.29 m
-export const R_WHOLE = 4.5;                             // 13.5 ft, == SUB/2
+export const R = 2.5;                                   // 2.5 yd = 2.286 m
+export const R_WHOLE = 4.5;                             // 4.5 yd = 4.115 m, == SUB/2
 
 /* ----------------------------------------------------------- the planes -- */
 
 /**
- * THE SLICE PLANES, in SUB-BLOCKS, per axis.  "by making slices happen at the colored
+ * THE SLICE PLANES, in YARDS from a corner, per axis.  "by making slices happen at the colored
  * lines it makes it easier to find pieces that line up."
  *
  *   0, 9       the boundary          (magenta)
