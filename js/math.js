@@ -103,10 +103,30 @@ export function planeBasis(n) {
  *   r = ( sin yaw,-cos yaw, 0)   = f × up
  *   u = ( 0, 0, 1)               world up, always
  */
+/**
+ * THE TWO CAMERAS, and why the law above is not broken by the second one.
+ *
+ * EXPLORE mode keeps `pitch` at zero and uses `shift`, exactly as argued above:
+ * you are inside the space, the verticals are dead vertical, and the picture is
+ * a plate.  That is the whole aesthetic and it does not bend.
+ *
+ * BUILD mode is not a view of the space, it is a view of the MODEL — a three
+ * quarter overhead, rotatable, with the layer you are working on picked out.
+ * You cannot do that without looking down; a rising front can bring a ceiling
+ * into frame but it can never show you the top of a floor slab.  So build mode
+ * pitches, and it is honest about being a different instrument: a drawing board
+ * rather than a plate.  Piranesi's own plans looked down; only his views did
+ * not.
+ *
+ * `pitch` is therefore allowed but must stay 0 in explore mode, and the test
+ * suite pins the vertical-line law against a zero-pitch camera.
+ */
 export class Camera {
   constructor(opts = {}) {
     this.eye = opts.eye ? opts.eye.slice() : [0, -14, 2.6];
     this.yaw = opts.yaw ?? 90 * DEG;
+    /** Radians below horizontal. ZERO in explore mode, always. */
+    this.pitch = opts.pitch ?? 0;
     /** Focal length in PIXELS.  Set through `setFraming`. */
     this.focal = opts.focal ?? 1000;
     /** Rising front, in pixels.  Positive = the plate looks upward. */
@@ -127,19 +147,27 @@ export class Camera {
 
   get hfovDeg() { return 2 * Math.atan((this.width / 2) / this.focal) / DEG; }
 
+  /** The ground-plane basis: forward is horizontal whatever the pitch, so that
+   *  walking and strafing never fly you into the floor. */
   basis() {
     const c = Math.cos(this.yaw), s = Math.sin(this.yaw);
     return { f: [c, s, 0], r: [s, -c, 0], u: [0, 0, 1] };
   }
 
-  /** Cache the six numbers the hot loop needs, so projecting a vertex is nine
-   *  multiplies and no property lookups on `this`. */
+  /** Cache the numbers the hot loop needs, so projecting a vertex is a dozen
+   *  multiplies and no property lookups on `this`.  At pitch 0 the z terms are
+   *  exactly zero and the vertical-line law holds by construction. */
   snapshot() {
-    const c = Math.cos(this.yaw), s = Math.sin(this.yaw);
+    const cy = Math.cos(this.yaw), sy = Math.sin(this.yaw);
+    const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
     return {
       ex: this.eye[0], ey: this.eye[1], ez: this.eye[2],
-      rx: s, ry: -c,            // right   (rz is 0 — the law)
-      fx: c, fy: s,             // forward (fz is 0 — the law)
+      // right stays horizontal under pitch — the camera never rolls
+      rx: sy, ry: -cy, rz: 0,
+      // forward tips down by `pitch`
+      fx: cy * cp, fy: sy * cp, fz: -sp,
+      // up is forward rotated a quarter turn in the vertical plane
+      ux: cy * sp, uy: sy * sp, uz: cp,
       F: this.focal,
       cx: this.width / 2,
       cy: this.height / 2 + this.shift,
@@ -159,9 +187,9 @@ export class Camera {
 
 export function projectWith(c, x, y, z) {
   const dx = x - c.ex, dy = y - c.ey, dz = z - c.ez;
-  const X = dx * c.rx + dy * c.ry;          // · right  (no z term: rz = 0)
-  const Z = dx * c.fx + dy * c.fy;          // · forward(no z term: fz = 0)
-  const Y = dz;                             // · up     (u = (0,0,1))
+  const X = dx * c.rx + dy * c.ry + dz * c.rz;
+  const Y = dx * c.ux + dy * c.uy + dz * c.uz;
+  const Z = dx * c.fx + dy * c.fy + dz * c.fz;
   if (Z <= 1e-4) return [0, 0, -1];
   const iz = 1 / Z;
   return [c.cx + c.F * X * iz, c.cy - c.F * Y * iz, iz];

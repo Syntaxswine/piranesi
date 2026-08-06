@@ -378,9 +378,9 @@ export function unproject(depth, c, sx, sy) {
   const X = (sx - c.cx) * Z / c.F;
   const Y = -(sy - c.cy) * Z / c.F;
   return [
-    c.ex + c.rx * X + c.fx * Z,
-    c.ey + c.ry * X + c.fy * Z,
-    c.ez + Y,
+    c.ex + c.rx * X + c.ux * Y + c.fx * Z,
+    c.ey + c.ry * X + c.uy * Y + c.fy * Z,
+    c.ez + c.rz * X + c.uz * Y + c.fz * Z,
   ];
 }
 
@@ -402,7 +402,11 @@ function clipNear(cam) {
 /** Camera-space coordinates: X right, Y up, Z forward. */
 function toCam(c, p) {
   const dx = p[0] - c.ex, dy = p[1] - c.ey, dz = p[2] - c.ez;
-  return [dx * c.rx + dy * c.ry, dz, dx * c.fx + dy * c.fy];
+  return [
+    dx * c.rx + dy * c.ry + dz * c.rz,
+    dx * c.ux + dy * c.uy + dz * c.uz,
+    dx * c.fx + dy * c.fy + dz * c.fz,
+  ];
 }
 const camToScreen = (c, P) => {
   const iz = 1 / P[2];
@@ -539,9 +543,9 @@ export class Engraver {
 
         // 1/Z as an affine function of screen position.
         const nc = [
-          f.n[0] * c.rx + f.n[1] * c.ry,
-          f.n[2],
-          f.n[0] * c.fx + f.n[1] * c.fy,
+          f.n[0] * c.rx + f.n[1] * c.ry + f.n[2] * c.rz,
+          f.n[0] * c.ux + f.n[1] * c.uy + f.n[2] * c.uz,
+          f.n[0] * c.fx + f.n[1] * c.fy + f.n[2] * c.fz,
         ];
         const d = nc[0] * poly[0][0] + nc[1] * poly[0][1] + nc[2] * poly[0][2];
         if (Math.abs(d) < 1e-9) { f.alive = false; continue; }
