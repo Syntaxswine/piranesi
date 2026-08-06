@@ -2,10 +2,10 @@
 // tools/formshot.mjs — LOOK AT THE PRIMARY FORMS.
 //
 // A contact sheet of the whole vocabulary from cube.js/forms.js, with a figure
-// standing beside each one.  The figure is not decoration: the owner's spec
-// changes the main block from twelve metres to two and three quarters, and
-// there is no way to tell from a picture of a cube whether that is right.  A
-// man is 1.75 m; put him in the frame and the question answers itself.
+// standing beside each one.  The figure is not decoration: a cube in isolation
+// has no size, and the owner's spec puts a block at 27 feet — 8.23 m, four and
+// three quarter men.  There is no way to see that in a picture of a cube.  Put
+// a man in the frame and the question answers itself.
 //
 //   node tools/formshot.mjs                    the whole shelf
 //   node tools/formshot.mjs --one vault-y      one form, big
@@ -135,16 +135,25 @@ console.log(`  faces ${r.faces} (${r.visible} visible)  CANCELLED ${r.cancelled}
 // count what the form offers on the run axis first, and only then judge.
 if (has('--run')) {
   const id = arg('--run', 'vault-y');
-  const faces = cat.get(id).mesh.faces;
-  const offered = faces.filter((f) => f.side === '+y' || f.side === '-y').length;
+  const m = cat.get(id).mesh;
+  // Slide the form's +y faces one block along and see whether any lands exactly
+  // on a -y face, using the renderer's own ring hash.  Counting faces alone is
+  // not enough: `niche` bites a half-round out of ONE face, so its two ends
+  // genuinely differ, its neighbour's flat wall correctly closes the recess
+  // instead of dissolving into it, and nothing should cancel.
+  const ring = (f, dy = 0) => f.v.map((i) => m.verts[i])
+    .map((p) => `${Math.round(p[0] * 8192)}:${Math.round((p[1] + dy) * 8192)}:${Math.round(p[2] * 8192)}`)
+    .sort().join('|');
+  const minus = new Set(m.faces.filter((f) => f.side === '-y').map((f) => ring(f, SUB)));
+  const offered = m.faces.filter((f) => f.side === '+y' && minus.has(ring(f))).length;
   if (!offered) {
-    console.log(`  nothing cancelled, and nothing should: ${id} presents no face on the joint — ` +
-      `it stands clear of its own boundary`);
+    console.log(`  nothing cancelled, and nothing should: ${id} presents no MATCHING pair ` +
+      `on the joint — its two ends differ, or it stands clear of its own boundary`);
   } else if (r.cancelled > 0) {
     console.log(`  the run cancelled ${r.cancelled} faces of the ${offered} ${id} offers — ` +
       `the blocks met and read as one mass`);
   } else {
-    console.log(`  ** NOTHING CANCELLED, but ${id} offers ${offered} faces on the joint ** — ` +
+    console.log(`  ** NOTHING CANCELLED, but ${id} offers ${offered} MATCHING faces ** — ` +
       `they are not landing in the same place; the cube law is being broken somewhere`);
   }
 }

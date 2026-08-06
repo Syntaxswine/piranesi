@@ -132,7 +132,10 @@ function marchBlocked(occ, px, py, pz, dx, dy, dz, maxDist, self) {
  */
 function skyVisibility(world, p, n, self) {
   let seen = 0, total = 0;
-  const occ = world.occupancy;
+  // THE SOLIDITY MAP, NOT THE OCCUPANCY MAP.  A block reserves its whole box
+  // but is mostly hole; marching what it reserves makes an arcade as opaque as
+  // a wall.  See world.js and solidity.js.
+  const occ = world.solid || world.occupancy;
   const ox = p[0] + n[0] * 0.03, oy = p[1] + n[1] * 0.03, oz = p[2] + n[2] * 0.03;
   for (const [dx, dy, dz, wgt] of SKY_RAYS) {
     const face = dx * n[0] + dy * n[1] + dz * n[2];
@@ -160,7 +163,7 @@ function skyVisibility(world, p, n, self) {
  * shadow a soft edge for free, and a hard-edged shadow is not an etching.
  */
 function keyVisibility(world, p, n, self) {
-  return marchBlocked(world.occupancy,
+  return marchBlocked(world.solid || world.occupancy,
     p[0] + n[0] * 0.03, p[1] + n[1] * 0.03, p[2] + n[2] * 0.03,
     KEY[0], KEY[1], KEY[2], KEY_REACH, self) ? 0 : 1;
 }

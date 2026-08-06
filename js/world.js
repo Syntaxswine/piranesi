@@ -32,6 +32,8 @@
 // four lines.  Face culling here is an AESTHETIC feature, not an optimisation:
 // it is what turns a row of bays into a receding tunnel.
 
+import { maskFor } from './solidity.js';
+
 export const SIDES = ['+x', '-x', '+y', '-y', '+z', '-z'];
 export const OPPOSITE = { '+x': '-x', '-x': '+x', '+y': '-y', '-y': '+y', '+z': '-z', '-z': '+z' };
 
@@ -47,6 +49,19 @@ export function turnSide(side, q) {
 
 export const key = (x, y, z) => `${x},${y},${z}`;
 export const q4 = (q) => ((q % 4) + 4) % 4;
+
+/** The inverse of the placement turn, on a cell offset — takes a world-relative
+ *  cell back to the block-local one it came from.  Must stay the exact inverse
+ *  of `mesh.js turnY`, or a rotated block's light holes end up in the wrong
+ *  place and nothing says so. */
+function unturnCell(dx, dy, q, sx, sy) {
+  switch (q) {
+    case 1: return [dy, sy - 1 - dx];
+    case 2: return [sx - 1 - dx, sy - 1 - dy];
+    case 3: return [sx - 1 - dy, dx];
+    default: return [dx, dy];
+  }
+}
 
 /**
  * THE TWO TIERS.  A cell holds one STRUCTURE and one FITTING.
@@ -78,9 +93,23 @@ export class World {
     this.catalog = catalog;
     /** "layer|x,y,z" → {x,y,z,id,rot,size,layer}.  One entry per BLOCK. */
     this.blocks = new Map();
-    /** cell key → anchor key, STRUCTURE only.  This is the map the light
-     *  marches through, which is why fittings are not in it. */
+    /** cell key → anchor key, STRUCTURE only.  What a block RESERVES: what a
+     *  click hits, and what stops another block being dropped through it. */
     this.occupancy = new Map();
+    /**
+     * cell key → anchor key, STRUCTURE only, and only where the block's mesh
+     * ACTUALLY HAS STONE.  This is the map the light marches through.
+     *
+     * A separate map because the two questions are different and conflating
+     * them was costing the light model everything it was built for.  A block
+     * has to reserve its whole box — a column that only claimed its own drum
+     * would let you drop a wall through the middle of it — but a ray does not
+     * care what a block reserves.  Measured before this existed: all eleven
+     * primary forms occupied 27 cells of 27, including `bore-y`, which is a
+     * tunnel you can see straight through.  So an arcade let no light through
+     * its arches and a colonnade was as opaque as a wall.  See solidity.js.
+     */
+    this.solid = new Map();
     /** cell key → anchor key, FITTING only. */
     this.fittings = new Map();
     /** Bumped on every mutation.  The renderer watches it to know the plate is
@@ -155,8 +184,20 @@ export class World {
     const anchor = anchorKey(layer, x, y, z);
     const map = this.mapFor(layer);
     this.blocks.set(anchor, rec);
-    for (const [cx, cy, cz] of this.footprint(x, y, z, id, rot)) {
-      map.set(key(cx, cy, cz), anchor);
+    const cells = this.footprint(x, y, z, id, rot);
+    for (const [cx, cy, cz] of cells) map.set(key(cx, cy, cz), anchor);
+    if (layer === STRUCTURE) {
+      const def = this.catalog.get(id);
+      const mask = maskFor(def);
+      const [msx, msy] = def.size || [1, 1, 1];
+      const q = q4(rot);
+      for (const [cx, cy, cz] of cells) {
+        // Back out the block-local cell, undoing the placement turn, so the
+        // mask is stored once per def and read through the rotation rather
+        // than recomputed four times.
+        const [lx, ly] = unturnCell(cx - x, cy - y, q, msx, msy);
+        if (mask[lx + msx * (ly + msy * (cz - z))]) this.solid.set(key(cx, cy, cz), anchor);
+      }
     }
     this.revision++;
     return displaced;
@@ -179,11 +220,16 @@ export class World {
     const map = this.mapFor(b.layer);
     this.blocks.delete(anchor);
     for (const [cx, cy, cz] of this.footprint(b.x, b.y, b.z, b.id, b.rot)) {
-      if (map.get(key(cx, cy, cz)) === anchor) map.delete(key(cx, cy, cz));
+      const k = key(cx, cy, cz);
+      if (map.get(k) === anchor) map.delete(k);
+      if (this.solid.get(k) === anchor) this.solid.delete(k);
     }
   }
 
-  clear() { this.blocks.clear(); this.occupancy.clear(); this.fittings.clear(); this.revision++; }
+  clear() {
+    this.blocks.clear(); this.occupancy.clear(); this.fittings.clear();
+    this.solid.clear(); this.revision++;
+  }
 
   bounds() {
     if (!this.blocks.size) return null;

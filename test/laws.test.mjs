@@ -20,6 +20,7 @@ import { buildCatalog as buildCatalog2 } from '../js/compose.js';
 import { bandFor, buildCamera, LAYER } from '../js/build.js';
 import { SUB, SUB_FEET, BLOCK_FEET, BLOCK_METRES, R, R_WHOLE, onPlane } from '../js/cube.js';
 import { FORMS } from '../js/forms.js';
+import { SAMPLE_OFFSETS } from '../js/solidity.js';
 
 const catalog = buildCatalog();
 
@@ -446,24 +447,31 @@ test('the stone skin draws no hatching at all, and the engraver still can', () =
 
 /* ------------------------------------------------------------ the cube law */
 
-test('the cube law: two radii, nine planes, and the block is nine feet', () => {
+test('the cube law: two radii, nine planes, and 9x9x9 sub-blocks to a block', () => {
   // The owner's spec of 2026-08-06, pinned as numbers so a later "tidy-up" of
-  // the constants has to argue with it.  All four were read off his diagram and
-  // agreed with the photograph to better than 1.5% of the block's width.
-  assert.equal(SUB, 3, 'the block is three sub-blocks on a side');
+  // the constants has to argue with it.  Every one was read off his diagram and
+  // agreed with the photograph to better than 1.5% of the block's width; the
+  // UNIT was the one thing the drawing could not settle, and he settled it —
+  // "its actually 9x9 blocks if you want to get technical."
+  assert.equal(SUB, 9, 'the block is nine sub-blocks on a side');
   assert.equal(SUB_FEET, 3, 'a sub-block is three feet');
-  assert.equal(BLOCK_FEET, 9);
-  assert.ok(Math.abs(BLOCK_METRES - 2.7432) < 1e-4, `the block came out ${BLOCK_METRES} m`);
-  // "the one whole block circle of 4.5" — in a nine-foot block that is exactly
+  assert.equal(BLOCK_FEET, 27);
+  assert.ok(Math.abs(BLOCK_METRES - 8.2296) < 1e-4, `the block came out ${BLOCK_METRES} m`);
+  // "the one whole block circle of 4.5" — in a block of nine that is exactly
   // half, so its circle is inscribed and tangent to all four faces.  If this
   // ever stops being true, arches stop springing on the boundary planes and
   // neighbouring vaults stop meeting.
   assert.ok(Math.abs(R_WHOLE - SUB / 2) < 1e-12, 'the whole-block circle must be inscribed');
-  assert.ok(Math.abs(R - 2.5 / 3) < 1e-12);
+  assert.equal(R, 2.5);
   assert.ok(onPlane(0) && onPlane(SUB) && onPlane(SUB / 2), 'the boundary and the axis are planes');
-  for (const f of [0, 2, 2.5, 3, 4.5, 6, 6.5, 7, 9]) {
-    assert.ok(onPlane(f / 3), `${f} ft is one of his coloured lines and must be a plane`);
+  for (const v of [0, 2, 2.5, 3, 4.5, 6, 6.5, 7, 9]) {
+    assert.ok(onPlane(v), `${v} is one of his coloured lines and must be a plane`);
   }
+  // And the reason his unit is the right one: this form is "mostly for making
+  // high vaulted arches", so its span has to be a vault and not a doorway.
+  const span = R_WHOLE * 2 * SUB_FEET;
+  assert.equal(span, 27, `the whole-block arch spans ${span} ft`);
+  assert.ok(1.75 / BLOCK_METRES < 0.25, 'a man must be a small fraction of a block');
 });
 
 test('every primary form that offers a face on the joint actually cancels it', () => {
@@ -546,4 +554,72 @@ test('the outer wall of a bored block is never mistaken for an internal cut', ()
       assert.ok(!all, `a face on the plane ${'xyz'[ax]}=${at} was tagged as an internal cut`);
     }
   }
+});
+
+/* ------------------------------------------------------------- solidity -- */
+
+test('a block reserves its whole box but only blocks light where it has stone', () => {
+  // The two questions are different and conflating them cost the light model
+  // everything it was built for.  Measured before solidity.js existed: ALL
+  // eleven primary forms occupied 27 cells of 27 — including `bore-y`, which is
+  // a tunnel you can see straight through.  So an arcade let no light through
+  // its arches and a colonnade was exactly as opaque as a wall.
+  const cat = new Map();
+  for (const id of Object.keys(FORMS)) {
+    const mesh = FORMS[id]();
+    mesh.finish();
+    cat.set(id, { id, name: id, family: 'primary', size: [SUB, SUB, SUB], mesh, layer: STRUCTURE });
+  }
+  const cells = SUB ** 3;
+  for (const id of cat.keys()) {
+    const w = new World(cat);
+    w.place(0, 0, 0, id);
+    assert.equal(w.cellCount, cells, `${id} must RESERVE its whole box`);
+    assert.ok(w.solid.size > 0, `${id} became invisible to light entirely`);
+    assert.ok(w.solid.size <= cells);
+  }
+  // The ones that must be see-through, and the one that must not.
+  assert.equal(new WorldWith(cat, 'solid').solid.size, cells, 'a solid block must stop everything');
+  for (const id of ['vault-y', 'bore-y', 'column', 'corner-shafts']) {
+    const n = new WorldWith(cat, id).solid.size;
+    assert.ok(n < cells * 0.7, `${id} blocks ${n} of ${cells} cells — light cannot get through it`);
+  }
+});
+
+class WorldWith extends World {
+  constructor(cat, id) { super(cat); this.place(0, 0, 0, id); }
+}
+
+test('the solidity sample never lands on the block mid-plane', () => {
+  // A block is three cells on a side, so a cell CENTRE is 0.5, 1.5, 2.5 — and
+  // 1.5 is the block's own mid-plane, where every arc in the game is struck
+  // from, where a vault springs, and where the whole-block circle is tangent to
+  // the walls.  Sampling there asks the ray cast the one question it cannot
+  // answer, and it answered wrong: a bore came back SOLID down its own axis.
+  // Within a cell, the fractions that ARE slice planes are 0 and 1 (the cell
+  // edges, which are sub-block boundaries) and 0.5 — because two of his planes,
+  // 2.5 and 6.5, fall in the middle of a cell.  Those are what to avoid.
+  for (const o of SAMPLE_OFFSETS) {
+    for (const bad of [0, 0.5, 1]) {
+      assert.ok(Math.abs(o - bad) > 0.05,
+        `sample offset ${o} sits on ${bad}, which is a plane the forms use`);
+    }
+  }
+});
+
+test('a rotated block keeps its light holes where its stone is not', () => {
+  // world.js has to undo the placement turn to read a block-local mask, and if
+  // that inverse is wrong the holes end up on the wrong side — which nothing in
+  // any picture would say, because the block still looks correct.
+  const mesh = FORMS['half-vault']();
+  mesh.finish();
+  const cat = new Map([['hv', { id: 'hv', name: 'hv', family: 'primary', size: [SUB, SUB, SUB], mesh, layer: STRUCTURE }]]);
+  const counts = [0, 1, 2, 3].map((rot) => {
+    const w = new World(cat);
+    w.place(0, 0, 0, 'hv', rot);
+    return w.solid.size;
+  });
+  assert.ok(counts.every((c) => c === counts[0]),
+    `a turn changed how much stone the block has: ${counts.join(', ')}`);
+  assert.ok(counts[0] > 0 && counts[0] < SUB ** 3);
 });
