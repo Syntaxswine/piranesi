@@ -13,7 +13,8 @@
 // that shows you the line first and the tone second is behaving like the process
 // it is imitating.
 
-import { buildCatalog, METRES_PER_CELL } from './blocks.js';
+import { METRES_PER_CELL } from './blocks.js';
+import { buildModules, stampCompound, MODULE, MODULE_METRES } from './modules.js';
 import { World } from './world.js';
 import { Camera, DEG, projectWith } from './math.js';
 import { Engraver, unproject } from './engrave.js';
@@ -21,14 +22,17 @@ import { buildScene, scenes } from './scenes.js';
 
 const SAVE_KEY = 'carceri.plate';
 
-const catalog = buildCatalog();
+// THE PLAYER BUILDS IN CUBES.  The fine block catalogue is still there and is
+// still what every cube is made of — it is just not what you hold in your hand.
+// See modules.js.
+const catalog = buildModules();
 const canvas = document.getElementById('plate');
 const ctx = canvas.getContext('2d');
 
 const state = {
   world: null,
-  camera: new Camera({ eye: [2.4, -5.5, 1.7], yaw: 62 * DEG, shift: 0 }),
-  block: 'pier',
+  camera: new Camera({ eye: [13, -7, 2.6], yaw: 72 * DEG, shift: 0 }),
+  block: 'bay',
   rot: 0,
   /** 'proof' = outline only, drawn at draft size.  'plate' = the full bite. */
   quality: 'proof',
@@ -214,9 +218,16 @@ function place(px, py, remove) {
       ? [Math.floor(inside[0]), Math.floor(inside[1]), Math.floor(inside[2])]
       : [Math.floor(outside[0]), Math.floor(outside[1]), Math.floor(outside[2])];
   }
+  const cube = target.map((v) => Math.floor(v / MODULE));
 
-  if (remove) state.world.remove(...target);
-  else state.world.place(target[0], target[1], target[2], state.block, state.rot);
+  if (remove) {
+    // Take the whole cube, not the tile the cursor happened to land on.
+    for (let i = 0; i < MODULE; i++) for (let j = 0; j < MODULE; j++) for (let k = 0; k < MODULE; k++) {
+      state.world.remove(cube[0] * MODULE + i, cube[1] * MODULE + j, cube[2] * MODULE + k);
+    }
+  } else {
+    stampCompound(state.world, catalog, cube[0], cube[1], cube[2], state.block, state.rot);
+  }
   save();
   invalidate(200);
 }
@@ -232,9 +243,13 @@ function hoverAt(px, py) {
     const n = draft.faceNormal[id] || [0, 0, 1];
     cell = [Math.floor(p.hit[0] + n[0] * 0.05), Math.floor(p.hit[1] + n[1] * 0.05), Math.floor(p.hit[2] + n[2] * 0.05)];
   }
-  const def = catalog.get(state.block);
-  const s = (state.rot % 2) ? [def.size[1], def.size[0], def.size[2]] : def.size;
-  state.hover = { cell, size: s };
+  // Snap to the cube grid and show the WHOLE compound's footprint, so a great
+  // vault announces that it is four cubes wide before you commit to it.
+  const cube = cell.map((v) => Math.floor(v / MODULE) * MODULE);
+  const c = catalog.compounds.get(state.block);
+  const t = c ? c.tiles : [1, 1, 1];
+  const s = (state.rot % 2) ? [t[1] * MODULE, t[0] * MODULE, t[2] * MODULE] : [t[0] * MODULE, t[1] * MODULE, t[2] * MODULE];
+  state.hover = { cell: cube, size: s };
 }
 
 /* ---------------------------------------------------------------- gestures */
@@ -304,17 +319,18 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 function renderPalette() {
   const host = document.getElementById('palette');
   host.innerHTML = '';
-  const families = [...new Set([...catalog.values()].map((d) => d.family))];
-  for (const fam of families) {
+  const all = [...catalog.compounds.values()];
+  for (const fam of [...new Set(all.map((d) => d.family))]) {
     const h = document.createElement('div');
     h.className = 'fam';
     h.textContent = fam;
     host.appendChild(h);
-    for (const def of [...catalog.values()].filter((d) => d.family === fam)) {
+    for (const def of all.filter((d) => d.family === fam)) {
       const b = document.createElement('button');
       b.className = 'blk' + (def.id === state.block ? ' on' : '');
       b.title = def.note;
-      b.innerHTML = `<span class="nm">${def.name}</span><span class="sz">${def.size.join('×')}</span>`;
+      const n = def.tiles[0] * def.tiles[1] * def.tiles[2];
+      b.innerHTML = `<span class="nm">${def.name}</span><span class="sz">${n > 1 ? def.tiles.join('×') : '1'}</span>`;
       b.onclick = () => { state.block = def.id; renderPalette(); };
       host.appendChild(b);
     }
@@ -324,11 +340,11 @@ function renderPalette() {
 
 function hud() {
   const s = state.stats;
-  const b = state.world.blocks.size;
+  const cubes = (state.world.cellCount / (MODULE ** 3)).toFixed(0);
   document.getElementById('hud').textContent =
-    `${b} blocks · ${state.world.cellCount} cells · ` +
-    `${(state.world.cellCount * METRES_PER_CELL ** 3).toFixed(0)} m³ · ` +
-    (s ? `${s.visible}/${s.faces} faces · ${s.hatchLines} strokes · ${s.ms.total.toFixed(0)} ms · ink ${(s.ink * 100).toFixed(0)}%` : '');
+    `${cubes} cubes (${MODULE_METRES} m) · ${state.world.size} tiles · ` +
+    `${(state.world.cellCount * METRES_PER_CELL ** 3 / 1000).toFixed(0)} × 10³ m³ · ` +
+    (s ? `${s.visible}/${s.faces} faces · ${s.cancelled} cancelled · ${s.hatchLines} strokes · ${s.ms.total.toFixed(0)} ms · ink ${(s.ink * 100).toFixed(0)}%` : '');
 }
 
 /* -------------------------------------------------------------------- saves */
@@ -346,10 +362,14 @@ function load() {
 
 document.getElementById('new').onclick = () => {
   state.world = new World(catalog);
-  for (let x = -4; x <= 4; x++) for (let y = -4; y <= 4; y++) state.world.place(x, y, -1, 'paving');
+  for (let cx = -1; cx <= 1; cx++) for (let cy = -1; cy <= 1; cy++) {
+    stampCompound(state.world, catalog, cx, cy, 0, 'bay');
+  }
   save(); invalidate(0);
 };
-for (const id of Object.keys(scenes)) {
+// Only the cube-built scenes: a block-built world cannot be looked up in the
+// module registry, and offering one would load a plate with nothing on it.
+for (const id of Object.keys(scenes).filter((k) => scenes[k].cubes)) {
   const o = document.createElement('option');
   o.value = id; o.textContent = scenes[id].title;
   document.getElementById('scene').appendChild(o);
@@ -363,7 +383,7 @@ document.getElementById('scene').onchange = (e) => {
 
 /* --------------------------------------------------------------------- boot */
 
-state.world = load() || buildScene('carceri', catalog);
+state.world = load() || buildScene('prison', catalog);
 renderPalette();
 addEventListener('resize', fit);
 // A tab that boots hidden never gets a rAF, and the game would sit on a blank

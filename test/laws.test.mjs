@@ -12,7 +12,8 @@ import { buildCatalog, METRES_PER_CELL } from '../js/blocks.js';
 import { World, STRUCTURE, FITTING } from '../js/world.js';
 import { Engraver } from '../js/engrave.js';
 import { Plate } from '../js/ink.js';
-import { buildScene, scenes } from '../js/scenes.js';
+import { buildScene, scenes, catalogFor } from '../js/scenes.js';
+import { buildModules, stampCompound, MODULE } from '../js/modules.js';
 
 const catalog = buildCatalog();
 
@@ -210,7 +211,11 @@ test('building somewhere else does not redraw the handwriting here', () => {
 
 test('every scene builds and puts something on the plate', () => {
   for (const id of Object.keys(scenes)) {
-    const w = buildScene(id, catalog);
+    // A cube scene's world is expressed in the MODULE registry, so it must be
+    // rendered with that registry — hand the engraver the block catalogue and
+    // it looks up ids that are not in it and draws a blank sheet.
+    const cat = catalogFor(id, catalog);
+    const w = buildScene(id, cat);
     assert.ok(w.blocks.size > 0, `${id} built nothing`);
     // Frame each scene from ITS OWN bounds.  A fixed camera for every scene
     // tests the camera, not the scene — the first version of this failed on
@@ -222,10 +227,67 @@ test('every scene builds and puts something on the plate', () => {
       yaw: 90 * DEG, shift: 50,
     });
     cam.setFraming({ width: 200, height: 240, hfovDeg: 80 });
-    const r = eng.render(w, cam, catalog, {});
+    const r = eng.render(w, cam, cat, {});
+    const ink = eng.plate.meanInk();
     assert.ok(r.faces > 0, `${id} drew no faces`);
-    assert.ok(eng.plate.meanInk() > 0.005, `${id} came back as a blank sheet`);
+    // Say the number. An instrument that only reports pass/fail makes you
+    // rebuild it from scratch to find out how close the miss was.
+    assert.ok(ink > 0.005, `${id} came back as a blank sheet — mean ink ${ink.toFixed(4)}`);
   }
+});
+
+/* ----------------------------------------------------------------- cubes */
+
+test('a sliced form is ONE object: its tiles cancel their cut faces', () => {
+  // The whole claim of the slicing path. Two neighbouring tiles of a great
+  // vault evaluate the same arc at the same boundary, so their cut faces are
+  // identical and vanish. If they stop cancelling, the vault is not one
+  // forty-eight-metre arc any more — it is twelve small ones with membranes
+  // between them, and it will read as twelve.
+  const cat = buildModules();
+  const w = new World(cat);
+  stampCompound(w, cat, 0, 0, 0, 'great-vault');
+  const eng = new Engraver({ width: 300, height: 260, ss: 1 });
+  const cam = new Camera({ eye: [24, -40, 6], yaw: 90 * DEG, shift: 40 });
+  cam.setFraming({ width: 300, height: 260, hfovDeg: 70 });
+  const r = eng.render(w, cam, cat, { hatching: false, coursing: false });
+  assert.equal(w.size, 12, 'a 4x1x3 compound is twelve tiles');
+  assert.ok(r.cancelled > 100, `only ${r.cancelled} faces cancelled — the tiles are not meeting`);
+});
+
+test('a vault sheet is taller than its own rise', () => {
+  // A semicircular arch of span S rises S/2, so a sheet only as tall as the
+  // rise has ZERO stone over its crown and comes back as a paper-thin shell
+  // with a slot along the top. Same law as an arch block, one scale up.
+  const cat = buildModules();
+  for (const id of ['great-vault', 'half-vault', 'great-arch']) {
+    const c = cat.compounds.get(id);
+    const spanCubes = id === 'half-vault' ? 4 : c.tiles[0];   // half is half an arc
+    assert.ok(c.tiles[2] > spanCubes / 2,
+      `${id} is ${c.tiles[2]} cubes tall for a ${spanCubes / 2}-cube rise`);
+  }
+});
+
+test('a cube is a cube, and a compound stamps exactly its own volume', () => {
+  const cat = buildModules();
+  for (const def of cat.values()) {
+    assert.deepEqual(def.size, [MODULE, MODULE, MODULE], `${def.id} is not a cube`);
+  }
+  const w = new World(cat);
+  stampCompound(w, cat, 0, 0, 0, 'bay');
+  assert.equal(w.cellCount, MODULE ** 3);
+  w.clear();
+  stampCompound(w, cat, 0, 0, 0, 'great-vault');
+  assert.equal(w.cellCount, 12 * MODULE ** 3, 'twelve tiles, no overlap and no gap');
+});
+
+test('a turned compound occupies a turned footprint and no cell twice', () => {
+  const cat = buildModules();
+  const w = new World(cat);
+  stampCompound(w, cat, 0, 0, 0, 'great-vault', 1);      // 4x1 cubes -> 1x4
+  assert.equal(w.cellCount, 12 * MODULE ** 3, 'a turn must not make tiles collide');
+  assert.ok(w.at(0, 3 * MODULE, 0), 'the compound must run along +y once turned');
+  assert.equal(w.at(3 * MODULE, 0, 0), null, 'and must not run along +x');
 });
 
 test('the tone transfer curve is monotonic', () => {

@@ -18,7 +18,7 @@ import { writePNG } from './png.mjs';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { buildCatalog } from '../js/blocks.js';
-import { buildScene, scenes } from '../js/scenes.js';
+import { buildScene, scenes, catalogFor } from '../js/scenes.js';
 import { World } from '../js/world.js';
 import { Camera, DEG } from '../js/math.js';
 import { Engraver } from '../js/engrave.js';
@@ -38,7 +38,8 @@ const sceneId = arg('--scene', 'carceri');
 const out = resolve(arg('--out', `docs/shots/${sceneId}.png`));
 const ss = Number(arg('--ss', '2'));
 
-const catalog = buildCatalog();
+// A cube scene's world is expressed in the MODULE registry, not the block one.
+const catalog = catalogFor(sceneId, buildCatalog());
 const world = has('--load')
   ? World.fromJSON(catalog, JSON.parse(readFileSync(arg('--load'), 'utf8')))
   : buildScene(sceneId, catalog);

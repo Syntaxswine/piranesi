@@ -5,9 +5,14 @@
 // private arrangement certifies its own private arrangement and nothing else.
 
 import { World } from './world.js';
+import { buildModules, stampCompound, MODULE } from './modules.js';
 
 export const scenes = {};
 const scene = (id, title, note, build) => { scenes[id] = { id, title, note, build }; };
+
+/** Scenes built out of CUBES rather than blocks get their own registry; a scene
+ *  declares which one it wants with `cubes: true`. */
+const cubeScene = (id, title, note, build) => { scenes[id] = { id, title, note, build, cubes: true }; };
 
 /* -------------------------------------------------------------------------- */
 
@@ -203,10 +208,67 @@ scene('carceri-old', 'The prison (first attempt)', 'Kept because it is what the 
 
 /* -------------------------------------------------------------------------- */
 
+/* ========================================================== built of CUBES */
+
+cubeScene('prison', 'The prison', 'Assembled entirely from cubes. A forty-eight-metre vault sliced across twelve of them, carried on great piers, with a whole smaller arcade standing underneath it - which is the layering the plates actually have: architecture inside architecture, at two scales that do not acknowledge each other.',
+  (w, cat) => {
+    const S = (cx, cy, cz, id, rot = 0) => stampCompound(w, cat, cx, cy, cz, id, rot);
+    const DEPTH = 5;
+
+    for (let cy = 0; cy < DEPTH; cy++) {
+      // THE GREAT VAULT, springing one cube up, carried on great piers. Its
+      // legs land on the outer edges of the pier cubes below it.
+      S(0, cy, 1, 'great-vault');
+      S(0, cy, 0, 'pier-great');
+      S(3, cy, 0, 'pier-great');
+
+      // THE ARCADE UNDERNEATH, at its own much smaller scale. Two bays wide,
+      // running the length of the hall; their end faces cancel into a tunnel.
+      S(1, cy, 0, 'bay');
+      S(2, cy, 0, 'bay');
+    }
+
+    // A gallery hung inside the great vault, above the small arcade.
+    for (let cy = 1; cy < DEPTH; cy++) S(1, cy, 1, 'gallery', 2);
+
+    // The climb: a flight from the floor of the hall up to the gallery deck.
+    S(2, 0, 1, 'stair');
+
+    // A well dropped through the arcade, and a tower rising past everything.
+    S(2, 3, 0, 'well');
+    S(4, 2, 0, 'tower');
+    S(4, 2, 1, 'tower');
+
+    // The frame. Masses cropped by the edges of the plate; the buttressed wall
+    // shores the far side. A Carceri is framed by stone on every side.
+    S(-1, -1, 0, 'mass'); S(-1, -1, 1, 'mass');
+    S(4, -1, 0, 'mass'); S(4, -1, 1, 'mass'); S(4, -1, 2, 'mass');
+    S(-1, 2, 0, 'buttress'); S(-1, 3, 0, 'buttress');
+    S(-1, 0, 0, 'buttress');
+  });
+
+cubeScene('kit', 'The kit', 'Every cube in the catalogue, one of each, spaced out. For looking at geometry, not at composition - a compound is shown assembled.',
+  (w, cat) => {
+    let cx = 0;
+    for (const c of cat.compounds.values()) {
+      stampCompound(w, cat, cx, 0, 0, c.id, 0);
+      cx += c.tiles[0] + 1;
+    }
+  });
+
 export function buildScene(id, catalog) {
   const s = scenes[id];
   if (!s) throw new Error(`no such scene: ${id} (have: ${Object.keys(scenes).join(', ')})`);
-  const w = new World(catalog);
-  s.build(w, catalog);
+  const cat = s.cubes ? (buildScene.modules ||= buildModules()) : catalog;
+  const w = new World(cat);
+  s.build(w, cat);
   return w;
 }
+
+/** Which registry a scene's world is expressed in. Callers that render need
+ *  this, because the engraver looks blocks up by id. */
+export function catalogFor(id, blockCatalog) {
+  return scenes[id] && scenes[id].cubes ? (buildScene.modules ||= buildModules()) : blockCatalog;
+}
+
+export { MODULE };

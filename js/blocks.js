@@ -217,6 +217,46 @@ def({
 });
 
 def({
+  id: 'stair-steep', name: 'Steep flight', family: 'walk', size: [1, 1, 1], rot: true,
+  note: 'Rises a whole cell in a whole cell: six treads at 33 cm. Steep, and correct — the Carceri stairs are long steep straight runs, and a 1-in-1 flight is the only one that climbs a module in a module.',
+  build: (m) => {
+    const N = 6, r = 1 / N;
+    for (let i = 0; i < N; i++) {
+      box(m, [0, i * r, 0], [1, 1, (i + 1) * r], { mat: 'stone', tag: 'tread', skip: i ? ['-y'] : [] });
+    }
+    return m;
+  },
+});
+
+def({
+  id: 'rail-steep', layer: 'fitting', name: 'Steep stair rail', family: 'guard', size: [1, 1, 1], rot: true,
+  note: 'The handrail raked 1-in-1 to match. A level rail beside a climbing flight is the tell that nobody measured anything.',
+  build: (m) => {
+    for (let i = 0; i <= 2; i++) {
+      const y = 0.1 + i * 0.4;
+      box(m, [0.03, y, y], [0.13, y + 0.1, y + 0.66], { mat: 'timber', tag: 'newel' });
+    }
+    strut(m, [0.08, 0.04, 0.7], [0.08, 0.96, 1.62], 0.045, { tag: 'rail' });
+    strut(m, [0.08, 0.04, 0.42], [0.08, 0.96, 1.34], 0.032, { tag: 'rail' });
+    return m;
+  },
+});
+
+def({
+  id: 'rubble', name: 'Fallen stone', family: 'mass', size: [1, 1, 1], rot: true,
+  note: 'A heap of dropped blocks. The Carceri are a ruin as much as a prison, and a module with no rubble in it reads as new-built.',
+  build: (m) => {
+    const put = (x, y, z, w, d, h, t) => box(m, [x, y, z], [x + w, y + d, z + h], { mat: 'rustic', tag: 'block', hatch: t });
+    put(0.02, 0.06, 0, 0.44, 0.40, 0.22);
+    put(0.40, 0.34, 0, 0.52, 0.44, 0.19);
+    put(0.14, 0.46, 0.20, 0.38, 0.34, 0.17);
+    put(0.55, 0.04, 0, 0.36, 0.30, 0.26);
+    put(0.30, 0.16, 0.20, 0.30, 0.26, 0.15);
+    return m;
+  },
+});
+
+def({
   id: 'landing', name: 'Landing', family: 'walk', size: [1, 1, 1], rot: false,
   note: 'A plate at the TOP of its cell, so a stair arriving from below meets it dead level. Paving sits at the bottom; a landing hangs at the top.',
   build: (m) => box(m, [0, 0, 0.75], [1, 1, 1], { mat: 'stone', tag: 'landing', hatchTop: 'u' }),

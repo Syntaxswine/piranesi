@@ -16,6 +16,46 @@ npm run shot       # pull an impression, headless, to docs/shots/
 
 ---
 
+## The cube
+
+**The cube is the unit of authorship.** A cube is 6 cells on a side — twelve
+metres — and it holds a whole detailed piece of architecture: piers with their
+coursing, an arcade with its imposts, a vault with its intrados, the railings and
+rings and lamps. The player assembles cubes. The fine block catalogue in
+`blocks.js` does not go away; it is demoted to being the *material* a cube is
+made of, which is where it belongs. Nobody builds a prison one voussoir at a
+time.
+
+A cube is exactly a very large block, so the lattice, the coincidence culling,
+the light marching, the picking and the saves all work unchanged — `World` was
+written against "anything with a size and a mesh".
+
+There are two ways to author one, and the second is the interesting one:
+
+**Compose.** Stamp catalogue blocks at local cell coordinates. Good for anything
+built *of* pieces — an arcade, a scaffold, a stair.
+
+**Slice.** Generate a form far larger than one cube and keep only the part inside
+this cube. A forty-eight-metre barrel vault is not four small vaults in a row; it
+is one arc struck about one centre, cut by the cube grid into a 4 × 3 sheet of
+tiles. **The tiles fit by construction** — two neighbours evaluate the same arc at
+the same boundary, so their cut faces coincide exactly and the coincidence rule
+cancels them. The seam is not hidden, it is not there.
+
+That second path is what lets the catalogue hold objects bigger than its own
+unit: a great vault as a 4 × 3 sheet, a half vault as two columns of 1 × 3.
+Cut the same arc a different way and you get a different kit from one generator.
+
+```bash
+node tools/moduleshot.mjs --list
+node tools/moduleshot.mjs --module great-vault      # assembled
+node tools/moduleshot.mjs --module great-vault --tiles   # laid out apart
+node tools/moduleshot.mjs --module bay --run 3
+```
+
+`moduleshot` reports how many faces cancelled, because that number is the
+difference between one big object and several small ones pretending.
+
 ## The one idea
 
 **In an etching, tone *is* line.** There is no grey; there is bitten line at a
