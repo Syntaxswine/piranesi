@@ -17,6 +17,18 @@
 > and `scenes.js` are still load-bearing for `plateshot`, `moduleshot` and two
 > tests; they go when those instruments are ported to composed blocks.
 >
+> ### ⛔ HOLD — new cube rules are coming from the owner
+>
+> 2026-08-06, verbatim: *"i like the aesthetics you have done, but i have some
+> other rules for cubes that should be better for modular building. let me
+> update a graph. i will post it in just a moment."*
+>
+> **Do not design block joinery, the socket ladder, or the boundary-face
+> question until that diagram arrives.** 0e below is the right problem and its
+> analysis is sound, but the owner has a specification for the answer and
+> anything built first will be built twice. The rest of the list — the drawing,
+> staffage, ornament — is unaffected and safe to work on.
+>
 > **0e is now the top of the list, and it got sharper:**
 >
 > **Composed blocks never cancel a face against each other.** `cancelled` is 0
