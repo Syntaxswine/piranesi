@@ -18,6 +18,8 @@ import { bandTone, bandLine, stoneRange } from '../js/palette.js';
 import { stoneAt } from '../js/stone.js';
 import { buildCatalog as buildCatalog2 } from '../js/compose.js';
 import { bandFor, buildCamera, LAYER } from '../js/build.js';
+import { SUB, SUB_FEET, BLOCK_FEET, BLOCK_METRES, R, R_WHOLE, onPlane } from '../js/cube.js';
+import { FORMS } from '../js/forms.js';
 
 const catalog = buildCatalog();
 
@@ -440,4 +442,108 @@ test('the stone skin draws no hatching at all, and the engraver still can', () =
   const hatch = eng.render(w, cam, cat, { skin: 'hatch' });
   assert.ok(hatch.hatchLines > 100, `the engraver drew only ${hatch.hatchLines} strokes — it has been broken`);
   assert.equal(eng.plate.stats.filled, 0, 'the engraver filled an area; it must be all line');
+});
+
+/* ------------------------------------------------------------ the cube law */
+
+test('the cube law: two radii, nine planes, and the block is nine feet', () => {
+  // The owner's spec of 2026-08-06, pinned as numbers so a later "tidy-up" of
+  // the constants has to argue with it.  All four were read off his diagram and
+  // agreed with the photograph to better than 1.5% of the block's width.
+  assert.equal(SUB, 3, 'the block is three sub-blocks on a side');
+  assert.equal(SUB_FEET, 3, 'a sub-block is three feet');
+  assert.equal(BLOCK_FEET, 9);
+  assert.ok(Math.abs(BLOCK_METRES - 2.7432) < 1e-4, `the block came out ${BLOCK_METRES} m`);
+  // "the one whole block circle of 4.5" — in a nine-foot block that is exactly
+  // half, so its circle is inscribed and tangent to all four faces.  If this
+  // ever stops being true, arches stop springing on the boundary planes and
+  // neighbouring vaults stop meeting.
+  assert.ok(Math.abs(R_WHOLE - SUB / 2) < 1e-12, 'the whole-block circle must be inscribed');
+  assert.ok(Math.abs(R - 2.5 / 3) < 1e-12);
+  assert.ok(onPlane(0) && onPlane(SUB) && onPlane(SUB / 2), 'the boundary and the axis are planes');
+  for (const f of [0, 2, 2.5, 3, 4.5, 6, 6.5, 7, 9]) {
+    assert.ok(onPlane(f / 3), `${f} ft is one of his coloured lines and must be a plane`);
+  }
+});
+
+test('every primary form that offers a face on the joint actually cancels it', () => {
+  // THE NUMBER THE WHOLE LAW EXISTS TO MOVE.  Before the cube law, a run of
+  // composed blocks cancelled ZERO faces — two procedurally different masses
+  // never put a face in the same place, so a row of blocks was a row of
+  // separate boxes and coincidence culling, the thing that turns a colonnade
+  // into a tunnel, never fired once.
+  const cat = new Map();
+  for (const id of Object.keys(FORMS)) {
+    const mesh = FORMS[id]();
+    mesh.finish();
+    cat.set(id, { id, name: id, family: 'primary', size: [SUB, SUB, SUB], mesh, layer: STRUCTURE });
+  }
+  const cam = new Camera({ eye: [SUB * 3, -SUB * 4, SUB * 2], yaw: 60 * DEG, pitch: 0.5 });
+  cam.setFraming({ width: 200, height: 160, hfovDeg: 50 });
+  const eng = new Engraver({ width: 200, height: 160, ss: 1 });
+
+  // The ring hash the renderer itself uses, so this asks the same question the
+  // renderer asks rather than a plausible-looking substitute.
+  const ring = (m, f, dy = 0) => f.v.map((i) => m.verts[i])
+    .map((p) => `${Math.round(p[0] * 8192)}:${Math.round((p[1] + dy) * 8192)}:${Math.round(p[2] * 8192)}`)
+    .sort().join('|');
+
+  for (const [id, def] of cat) {
+    const m = def.mesh;
+    const w = new World(cat);
+    for (let i = 0; i < 3; i++) w.place(0, i * SUB, 0, id);
+    const r = eng.render(w, cam, cat, { skin: 'stone', lines: false });
+
+    // Does this form actually PRESENT a matching pair?  Slide its +y faces one
+    // block along and see whether any lands exactly on a -y face.  Asserting
+    // cancellation without checking this would fail a form that is correctly
+    // asymmetric — `niche` bites a half-round out of one face only, so its two
+    // ends genuinely differ and its neighbour's flat wall correctly closes the
+    // recess instead of dissolving into it.
+    const minus = new Set(m.faces.filter((f) => f.side === '-y').map((f) => ring(m, f, SUB)));
+    const matches = m.faces.filter((f) => f.side === '+y' && minus.has(ring(m, f))).length;
+
+    if (matches === 0) {
+      assert.equal(r.cancelled, 0,
+        `${id} presents no matching pair, so nothing should cancel, yet ${r.cancelled} did`);
+      continue;
+    }
+    assert.ok(r.cancelled > 0,
+      `${id} presents ${matches} matching faces on the joint and cancelled none — the law is broken`);
+  }
+});
+
+test('a bored block reads as one mass, not as a ring of wedges', () => {
+  // The mesh has no notion of a hole, so a bored block is cut into pieces and
+  // the cuts are arbitrary surfaces both pieces own.  Untagged, they print as
+  // creases and the block looks assembled from segments.
+  const m = FORMS.shaft();
+  m.finish();
+  const cat = new Map([['shaft', { id: 'shaft', name: 'shaft', family: 'primary', size: [SUB, SUB, SUB], mesh: m, layer: STRUCTURE }]]);
+  const w = new World(cat);
+  w.place(0, 0, 0, 'shaft');
+  const cam = new Camera({ eye: [SUB * 2, -SUB * 2, SUB * 2], yaw: 60 * DEG, pitch: 0.5 });
+  cam.setFraming({ width: 200, height: 160, hfovDeg: 50 });
+  const eng = new Engraver({ width: 200, height: 160, ss: 1 });
+  const r = eng.render(w, cam, cat, { skin: 'stone', lines: false });
+  assert.ok(r.cancelled >= 8, `only ${r.cancelled} internal cut faces cancelled; the wedges will show`);
+});
+
+test('the outer wall of a bored block is never mistaken for an internal cut', () => {
+  // When the circle is tangent to the square, a corner piece runs corner →
+  // tangent ALONG the block's own edge — one end on the arc, one not, which the
+  // radius test alone calls a cut.  Tagging the outer wall as internal would
+  // quietly kill the cancellation between neighbouring blocks.
+  const m = FORMS['bore-y']();
+  m.finish();
+  const onBoundary = m.faces.filter((f) => f.side && f.side !== 'cut').length;
+  assert.ok(onBoundary >= 8, `only ${onBoundary} faces kept a real boundary tag`);
+  for (const f of m.faces) {
+    if (f.side !== 'cut') continue;
+    // a cut may not lie on a boundary plane
+    for (const [ax, at] of [[0, 0], [0, SUB], [1, 0], [1, SUB], [2, 0], [2, SUB]]) {
+      const all = f.v.every((i) => Math.abs(m.verts[i][ax] - at) < 1e-6);
+      assert.ok(!all, `a face on the plane ${'xyz'[ax]}=${at} was tagged as an internal cut`);
+    }
+  }
 });

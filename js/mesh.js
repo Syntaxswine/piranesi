@@ -245,9 +245,12 @@ export function box(m, [x0, y0, z0], [x1, y1, z1], o = {}) {
  *
  * @param profile  [[a,c], …] in the profile plane, wound so the interior is on
  *                 the left; a CLOSED loop if `closed`.
- * @param axis     'x' | 'y' — which world axis the profile is swept along.
- *                 The profile's `a` runs along the other horizontal axis and
- *                 `c` runs up.
+ * @param axis     'x' | 'y' | 'z' — which world axis the profile is swept along.
+ *                 For a horizontal sweep the profile's `a` runs along the other
+ *                 horizontal axis and `c` runs up.  For 'z' — a vertical prism,
+ *                 which is what a column, a bored shaft or a block with its
+ *                 arrises rounded off actually is — the profile is a PLAN:
+ *                 `a` is x and `c` is y.
  * @param s0,s1    sweep extent along `axis`.
  *
  * Every quad it emits gets u = along the sweep, v = along the profile.  That is
@@ -258,8 +261,9 @@ export function sweep(m, profile, axis, s0, s1, o = {}) {
   const mat = o.mat || 'stone';
   const closed = o.closed !== false;
   const n = profile.length;
-  const at = (a, c, s) => (axis === 'x' ? [s, a, c] : [a, s, c]);
-  const along = axis === 'x' ? [1, 0, 0] : [0, 1, 0];
+  const at = (a, c, s) => (axis === 'x' ? [s, a, c] : axis === 'z' ? [a, c, s] : [a, s, c]);
+  const along = axis === 'x' ? [1, 0, 0] : axis === 'z' ? [0, 0, 1] : [0, 1, 0];
+  const AX = axis === 'x' ? 0 : axis === 'z' ? 2 : 1;
 
   const A = profile.map(([a, c]) => m.vert(at(a, c, s0)));
   const B = profile.map(([a, c]) => m.vert(at(a, c, s1)));
@@ -271,10 +275,17 @@ export function sweep(m, profile, axis, s0, s1, o = {}) {
     const da = p1[0] - p0[0], dc = p1[1] - p0[1];
     const L = Math.hypot(da, dc) || 1;
     const vDir = at(da / L, dc / L, 0);
-    vDir[axis === 'x' ? 0 : 1] = 0;
+    vDir[AX] = 0;
     m.face([A[i], A[j], B[j], B[i]], {
       mat, u: along, vDir, hatch: o.hatch ?? 'v', tag: o.tag,
-      side: o.side || null, form: o.form !== false,
+      // `sideAt` lets a caller mark INDIVIDUAL profile edges.  It exists for
+      // shapes with a hole in them: the mesh has no notion of one, so a bored
+      // block is cut into pieces, and the cuts are arbitrary surfaces that both
+      // pieces own.  Marking them makes the coincidence rule cancel the pair,
+      // which is exactly what it is for — otherwise the arbitrary cut prints as
+      // a crease and the block looks like it was assembled from wedges.
+      side: (o.sideAt ? o.sideAt(i) : null) || o.side || null,
+      form: o.form !== false,
     });
   }
   if (o.caps !== false && closed) {
@@ -283,8 +294,11 @@ export function sweep(m, profile, axis, s0, s1, o = {}) {
     // bay — which is what makes a run of vaults one continuous tunnel instead of
     // a row of separate arches with membranes between them.
     const capU = axis === 'x' ? [0, 1, 0] : [1, 0, 0];
-    m.face(A.slice().reverse(), { mat, u: capU, vDir: [0, 0, 1], hatch: o.hatchCap ?? 'v', side: o.sideA || null, tag: o.tag });
-    m.face(B.slice(), { mat, u: capU, vDir: [0, 0, 1], hatch: o.hatchCap ?? 'v', side: o.sideB || null, tag: o.tag });
+    // A vertical prism's caps are its plan, so their second frame axis is y,
+    // not z — hatching them up the wall would run the strokes off the surface.
+    const capV = axis === 'z' ? [0, 1, 0] : [0, 0, 1];
+    m.face(A.slice().reverse(), { mat, u: capU, vDir: capV, hatch: o.hatchCap ?? 'v', side: o.sideA || null, tag: o.tag });
+    m.face(B.slice(), { mat, u: capU, vDir: capV, hatch: o.hatchCap ?? 'v', side: o.sideB || null, tag: o.tag });
   }
   return m;
 }
