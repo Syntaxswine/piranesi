@@ -79,8 +79,8 @@ const cam = new Camera({
 cam.setFraming({ width: W, height: H, hfovDeg: Number(arg('--fov', '52')) });
 
 const eng = new Engraver({ width: W, height: H, ss: Number(arg('--ss', '2')) });
-const r = eng.render(world, cam, cat, {});
-const img = eng.plate.develop({});
+const r = eng.render(world, cam, cat, { skin: arg('--skin', 'stone') });
+const img = eng.plate.develop({ warmth: eng.warmth });
 
 const out = resolve(arg('--out', 'docs/shots/blocks.png'));
 mkdirSync(dirname(out), { recursive: true });

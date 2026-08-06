@@ -14,7 +14,8 @@ import { Engraver } from '../js/engrave.js';
 import { Plate } from '../js/ink.js';
 import { buildScene, scenes, catalogFor } from '../js/scenes.js';
 import { buildModules, stampCompound, MODULE } from '../js/modules.js';
-import { bandTone, bandLine } from '../js/palette.js';
+import { bandTone, bandLine, stoneRange } from '../js/palette.js';
+import { stoneAt } from '../js/stone.js';
 import { buildCatalog as buildCatalog2 } from '../js/compose.js';
 import { bandFor, buildCamera, LAYER } from '../js/build.js';
 
@@ -304,7 +305,7 @@ test('the tone transfer curve is monotonic', () => {
   const eng = new Engraver({ width: 200, height: 200, ss: 1 });
   let prev = -1;
   for (let i = 0; i <= 10; i++) {
-    eng.render(w, cam, catalog, { coursing: false, lines: false, sky: false, forceTone: i / 10 });
+    eng.render(w, cam, catalog, { skin: 'hatch', coursing: false, lines: false, sky: false, forceTone: i / 10 });
     const ink = eng.plate.meanInk();
     assert.ok(ink >= prev - 1e-3, `tone ${(i / 10).toFixed(2)} gave ${ink.toFixed(3)}, less than ${prev.toFixed(3)}`);
     prev = ink;
@@ -388,4 +389,55 @@ test('no face ever asks the hatcher for a tone of NaN', () => {
   eng.render(w, cam, cat, { bandOf: bandFor(0) });
   const bad = eng.faceTone.filter((t) => Number.isNaN(t)).length;
   assert.equal(bad, 0, `${bad} faces asked for a tone of NaN and drew nothing`);
+});
+
+/* -------------------------------------------------------------- the skin -- */
+
+test('the stone skin is a middle grey: nothing is paper and nothing is black', () => {
+  // "lets try a middle grey with a stone texture" — the etching's own tone curve
+  // is built for bare paper against near-solid black, and handed straight to a
+  // fill it makes the model read as painted card.  The stone skin remaps into a
+  // band that never reaches either end, and the texture may not push it out.
+  for (let i = 0; i <= 20; i++) {
+    const v = stoneRange(i / 20);
+    assert.ok(v >= 0.20 && v <= 0.78, `a face at ${i / 20} landed at ${v.toFixed(2)}`);
+  }
+  assert.ok(stoneRange(1) - stoneRange(0) > 0.35, 'the band must still hold a usable range of value');
+});
+
+test('the stone texture is band-limited, so a distant surface stops fizzing', () => {
+  // An octave finer than a pixel does not add detail, it adds CRAWLING noise
+  // the moment the camera moves — and the build camera is near-orthographic
+  // from 420 cells back while the explore camera is inside the room, so both
+  // extremes happen in one session.
+  const near = [], far = [];
+  for (let i = 0; i < 400; i++) {
+    const p = [i * 0.013, i * 0.021 + 3, i * 0.007 + 1];
+    near.push(stoneAt(p[0], p[1], p[2], 0.004));
+    far.push(stoneAt(p[0], p[1], p[2], 0.9));
+  }
+  const swing = (a) => Math.max(...a) - Math.min(...a);
+  assert.ok(swing(far) < swing(near) * 0.6,
+    `the far sample swings ${swing(far).toFixed(3)} against ${swing(near).toFixed(3)} near — it is not being filtered`);
+  assert.ok(swing(near) > 0.08, 'the texture must actually be visible up close');
+});
+
+test('the stone skin draws no hatching at all, and the engraver still can', () => {
+  // The two skins are different pictures, not a setting on one picture.  The
+  // engraver is kept whole because it is wanted for another project.
+  const cat = buildCatalog2(4, 1);
+  const w = new World(cat);
+  w.place(0, 0, 0, [...cat.keys()][0]);
+  const cam = new Camera({});
+  buildCamera(cam, { centre: [LAYER / 2, LAYER / 2], layer: 0, yaw: 0.8, zoom: 1, width: 200, height: 150 });
+  const eng = new Engraver({ width: 200, height: 150, ss: 1 });
+
+  const stone = eng.render(w, cam, cat, { skin: 'stone' });
+  assert.equal(stone.hatchLines, 0, 'the stone skin drew hatching');
+  assert.ok(eng.plate.stats.filled > 500, 'the stone skin filled nothing');
+  assert.ok(stone.ink > 0.02, 'the stone skin put no tone on the sheet');
+
+  const hatch = eng.render(w, cam, cat, { skin: 'hatch' });
+  assert.ok(hatch.hatchLines > 100, `the engraver drew only ${hatch.hatchLines} strokes — it has been broken`);
+  assert.equal(eng.plate.stats.filled, 0, 'the engraver filled an area; it must be all line');
 });

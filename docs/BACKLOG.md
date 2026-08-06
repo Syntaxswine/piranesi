@@ -33,6 +33,14 @@
 > a coarse boundary grid; or a declared "edge profile" per side, chosen from a
 > small set, that neighbours match.
 >
+> **The engraver is a keeper, not a leftover.** `skin: 'hatch'` is no longer the
+> game's look, but the owner wants it for another project — "a fun *Take On Me*
+> aesthetic", which is exactly right for it. It stays whole, stays under test
+> and stays in CI. Anything that breaks it fails `the stone skin draws no
+> hatching at all, and the engraver still can`. Everything below about hatching,
+> the two states, reserved white and the register ladder belongs to THAT
+> project now, not to this one.
+>
 > Then the rest of 0e as before: the masses are plain boxes wanting relief, wear
 > and ornament, and six archetypes want to be ten. Also — the build view has no
 > enclosure, so every face sees the whole sky and the tonal range starts low. An

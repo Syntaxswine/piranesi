@@ -63,7 +63,10 @@ buildCamera(cam, {
 
 const eng = new Engraver({ width: W, height: H, ss: Number(arg('--ss', '2')) });
 const t0 = Date.now();
-const r = eng.render(world, cam, cat, { bandOf: has('--flat') ? null : bandFor(WORK) });
+const r = eng.render(world, cam, cat, {
+  skin: arg('--skin', 'stone'),
+  bandOf: has('--flat') ? null : bandFor(WORK),
+});
 const img = eng.plate.develop({ warmth: eng.warmth });
 
 const out = resolve(arg('--out', 'docs/shots/layers.png'));

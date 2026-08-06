@@ -17,7 +17,8 @@
 // no post-process anywhere in this repo.
 
 import { Plate } from './ink.js';
-import { bandTone, bandLine, faceWarmth } from './palette.js';
+import { bandTone, bandLine, faceWarmth, stoneRange } from './palette.js';
+import { stoneAt, beddingAt } from './stone.js';
 import { projectWith, hash32, hashf, hashs, norm, cross, sub } from './math.js';
 import { MATERIALS } from './mesh.js';
 import { turnY, translate } from './mesh.js';
@@ -489,6 +490,22 @@ export const DEFAULTS = {
   fogDepth: 46,
   /** Cap on hatch lines per face — a runaway wall must degrade, not hang. */
   maxLinesPerFace: 420,
+  /**
+   * THE SKIN — which of the two pictures this is.
+   *
+   *   'stone'  a printed middle grey with a solid stone texture through it, and
+   *            the lines doing nothing but outline.  The game's own look, after
+   *            the owner saw the engraved one and said it was not right for
+   *            this game.
+   *   'hatch'  the software line engraver: no fills anywhere, every value on
+   *            the sheet made of bitten line.  Kept whole and kept working —
+   *            it is wanted for another project, and it is the more interesting
+   *            renderer of the two.  `tools/plateshot.mjs --skin hatch`.
+   */
+  skin: 'stone',
+  /** The middle grey, used where a face somehow reached the fill without a
+   *  tone.  The light normally decides this per face. */
+  stoneGrey: 0.46,
   coursing: true,
   hatching: true,
   lines: true,
@@ -665,7 +682,8 @@ export class Engraver {
     /* ---- 4 & 5 & 6 ------------------------------------------------------- */
     let hatchLines = 0;
     const warmById = new Map();
-    if (O.hatching || O.coursing) {
+    const stone = O.skin === 'stone';
+    if (stone || O.hatching || O.coursing) {
       for (const { inst, f } of visible) {
         const band = bandOf(inst.block);
         const fog = clamp01((f.zavg - z0) / O.fogDepth);
@@ -687,10 +705,16 @@ export class Engraver {
           // A ghosted face asks the hatcher for a third of its tone and the
           // hatcher draws a third of the line — so ghosting is not only
           // correct, it is most of the cost of a layer given back.  palette.js.
-          f.toneValue = bandTone(faceTone(f.n, f.mat, fog, mSky, mKey) + (f.tone || 0), band);
+          // Order: light → the skin's own range → the layer band.  The stone
+          // remap has to come first because it is a property of the MATERIAL
+          // being a printed grey, and the band is a property of the drawing
+          // board; banding a value that had not been brought into range yet
+          // would spend the headroom twice.
+          const shade = (t) => (stone ? stoneRange(t) : t);
+          f.toneValue = bandTone(shade(faceTone(f.n, f.mat, fog, mSky, mKey) + (f.tone || 0)), band);
           f.toneAt = (p) => {
             const L = lightAt(f.skySamples, p);
-            return clamp01(bandTone(faceTone(f.n, f.mat, fog, L.sky, L.key) + (f.tone || 0), band));
+            return clamp01(bandTone(shade(faceTone(f.n, f.mat, fog, L.sky, L.key) + (f.tone || 0)), band));
           };
         }
         // A ghost is drawn faint, so it is also drawn NEUTRAL: pushing a barely
@@ -698,10 +722,13 @@ export class Engraver {
         // different material rather than as a different height.
         warmById.set(f.id, band > 0 ? 0 : faceWarmth(f.n, mSky));
         this.faceTone[f.id] = f.toneValue;      // what the instruments audit
-        if (O.hatching) hatchLines += this.hatch(inst, f, c, f.toneValue, fog, O);
-        if (O.coursing) this.course(inst, f, c, f.toneValue, fog, O);
+        // The stone skin lays its tone as a printed area in one sweep after
+        // this loop, so a face contributes no strokes at all — only its value.
+        if (!stone && O.hatching) hatchLines += this.hatch(inst, f, c, f.toneValue, fog, O);
+        if (!stone && O.coursing) this.course(inst, f, c, f.toneValue, fog, O);
       }
     }
+    if (stone) this.stoneFill(c, O);
     if (O.lines) this.lineWork(insts, c, O, bandOf);
 
     // One sweep of the id buffer turns per-face warmth into the per-pixel field
@@ -715,6 +742,56 @@ export class Engraver {
     }
 
     return { faces: draw.length, visible: visible.length, hatchLines, ms: now() - t0 };
+  }
+
+  /* ----------------------------------------------------------- stone skin */
+
+  /**
+   * THE STONE SKIN.  A printed middle grey with the stone in it, and the lines
+   * left to do nothing but outline.
+   *
+   * This is a different picture from the engraved one, not a setting on it.
+   * There, tone WAS line: every value on the sheet was made of hatching, and the
+   * drawing described a surface by how it was stroked.  Here the surface is a
+   * printed area with a texture through it, and the line work steps back to
+   * being a contour — which is what an antique chromolithograph block does, and
+   * the toy blocks are the reference.
+   *
+   * Done as one sweep of the finished stencil rather than per face.  The stencil
+   * already answers "which face is under this pixel" and `unproject` already
+   * inverts the projection, so every pixel can ask the world where it stands and
+   * look the stone up THERE — a solid texture, continuous round an arris and
+   * across two neighbouring blocks.  Per-face UVs would tile and would seam.
+   */
+  stoneFill(c, O) {
+    const d = this.depth, F = this.plate.fill, w = this.width;
+    const grey = O.stoneGrey ?? 0.46;
+    let filled = 0;
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        const id = d.id[i];
+        if (id < 0) continue;
+        const iz = d.z[i];
+        if (iz <= 0) continue;
+        const Z = 1 / iz;
+        const X = (x + 0.5 - c.cx) * Z / c.F, Y = -(y + 0.5 - c.cy) * Z / c.F;
+        const px = c.ex + c.rx * X + c.ux * Y + c.fx * Z;
+        const py = c.ey + c.ry * X + c.uy * Y + c.fy * Z;
+        const pz = c.ez + c.rz * X + c.uz * Y + c.fz * Z;
+        // World units per pixel at this depth — the band limit.  Without it the
+        // fine octaves alias into a crawling fizz the moment the camera moves.
+        const wpp = Z / c.F;
+        const t = (this.faceTone[id] ?? grey) + stoneAt(px, py, pz, wpp) + beddingAt(pz, wpp);
+        // MULTIPLY, do not assign.  The ghost pass runs this a second time over
+        // the same buffer, and a ghost is a haze laid OVER what is behind it;
+        // assigning would let a pale layer above lighten the solid beneath it,
+        // which is the one thing ghosting must never do.
+        F[i] *= 1 - (t < 0 ? 0 : t > 1 ? 1 : t);
+        filled++;
+      }
+    }
+    this.plate.stats.filled = filled;
   }
 
   /* ------------------------------------------------------------ line work */

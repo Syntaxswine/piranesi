@@ -46,17 +46,33 @@ export class Plate {
     this.ss = ss;
     this.w = w * ss;
     this.h = h * ss;
-    /** Transmittance.  1 = bare paper, 0 = fully inked. */
+    /** Transmittance of the LINE WORK.  1 = bare paper, 0 = fully inked. */
     this.T = new Float32Array(this.w * this.h).fill(1);
+    /**
+     * Transmittance of the FLAT TONE — the printed area under the drawing.
+     *
+     * A second buffer, and at OUTPUT resolution rather than the supersampled
+     * one, because the two are different kinds of mark.  A stroke is a thin
+     * thing whose quality lives in its antialiasing, so it needs the
+     * supersample; a printed ground is a broad area whose edges are covered by
+     * the outline drawn over them, so it does not, and giving it one would cost
+     * four times the texture evaluations for nothing visible.
+     *
+     * They combine by multiplying, like everything else here: a line over a
+     * grey ground is darker than either.  See `develop`.
+     */
+    this.fill = new Float32Array(w * h).fill(1);
     /** Bookkeeping the instruments read; see tools/plateshot.mjs. */
-    this.stats = { strokes: 0, segments: 0, pixels: 0 };
+    this.stats = { strokes: 0, segments: 0, pixels: 0, filled: 0 };
   }
 
   clear() {
     this.T.fill(1);
+    this.fill.fill(1);
     this.stats.strokes = 0;
     this.stats.segments = 0;
     this.stats.pixels = 0;
+    this.stats.filled = 0;
   }
 
   /**
@@ -154,10 +170,19 @@ export class Plate {
    *  a Carceri plate is a DARK object, and if this reads 0.08 the renderer has
    *  drawn a technical illustration, not an engraving. */
   meanInk() {
-    const T = this.T;
+    const T = this.T, F = this.fill, ss = this.ss, W = this.w;
     let s = 0;
-    for (let i = 0; i < T.length; i++) s += T[i];
-    return 1 - s / T.length;
+    for (let y = 0; y < this.out.h; y++) {
+      for (let x = 0; x < this.out.w; x++) {
+        let a = 0;
+        for (let sy = 0; sy < ss; sy++) {
+          const row = (y * ss + sy) * W + x * ss;
+          for (let sx = 0; sx < ss; sx++) a += T[row + sx];
+        }
+        s += (a / (ss * ss)) * F[y * this.out.w + x];
+      }
+    }
+    return 1 - s / (this.out.w * this.out.h);
   }
 
   /** Histogram of developed luminance, `bins` buckets.  This is how we check the
@@ -215,8 +240,10 @@ export class Plate {
           const row = (y0 + sy) * W + x0;
           for (let sx = 0; sx < ss; sx++) acc += T[row + sx];
         }
-        const t = acc * inv * (1 - tone);
         const o = y * w + x;
+        // Line work × printed ground.  Both are transmittances, so this is the
+        // same Beer–Lambert multiply that makes cross-hatching work.
+        const t = acc * inv * this.fill[o] * (1 - tone);
 
         // Paper texture, two frequencies, and it modulates the GROUND only —
         // never the ink.  A texture that also dirties the ink reads as a filter

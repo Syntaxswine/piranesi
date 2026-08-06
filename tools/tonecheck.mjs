@@ -43,7 +43,9 @@ const cam = new Camera({ eye: [0.5, 0, 0.5], yaw: 90 * DEG, shift: 0 });
 cam.setFraming({ width: W, height: H, hfovDeg: 60 });
 
 const eng = new Engraver({ width: W, height: H, ss });
-const opts = { coursing: false, lines: false, sky: false };
+// THE ENGRAVER'S OWN INSTRUMENT.  This measures the hatcher, so it always
+// asks for the hatch skin whatever the game's default is.
+const opts = { skin: 'hatch', coursing: false, lines: false, sky: false };
 
 console.log(`pitch ${DEFAULTS.pitchPx} px   ${W}x${H} @ ${ss}x   ink = 1 − mean transmittance`);
 console.log('');

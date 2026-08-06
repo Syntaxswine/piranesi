@@ -1,8 +1,8 @@
 # Piranesi
 
-A peaceful block-building game, drawn as a copperplate etching, after Giovanni
-Battista Piranesi's *Carceri d'Invenzione* (1st state c. 1749–50, 2nd state
-1761).
+A peaceful block-building game after Giovanni Battista Piranesi's *Carceri
+d'Invenzione*. Muted neutral greys and browns, stone-textured masses, outlines
+that outline and nothing more.
 
 You build one vast interior, a layer at a time, out of blocks that are over the
 top, imposing, and not remotely practical — a single cube may carry a tower and
@@ -39,6 +39,24 @@ underneath. A face turned to the light takes the warm one and a face turned away
 takes the cool, so a block has a near side and a far side before any tone is laid
 at all. There is no colour anywhere in the palette.
 
+## Two skins
+
+`DEFAULTS.skin` chooses between two different pictures, not two settings on one.
+
+**`'stone'` is the game.** A printed middle grey with a **solid 3-D stone
+texture** through it, and the line work doing nothing but outline — no hatching
+anywhere. The texture is evaluated at the world point under each pixel, so the
+mottling runs round an arris without a seam and two neighbouring blocks are two
+pieces of one quarry. It is band-limited by hand, because the build camera is
+near-orthographic from 420 cells back and the explore camera is inside the room,
+and an octave finer than a pixel adds crawling noise rather than detail.
+
+**`'hatch'` is a software line engraver**, kept whole and kept under test: no
+fills anywhere, every value on the sheet made of bitten line, calibrated against
+measured museum scans of the Carceri plates. It is not this game's look — it is
+wanted for another project, and it is the more interesting renderer of the two.
+`node tools/plateshot.mjs --skin hatch`. Do not let it rot.
+
 **Blocks are composed, not drawn.** A vocabulary of sub-blocks — pier, archway,
 stair, catwalk, balustrade, drum, gantry, chain — is assembled by seeded
 generation into main blocks. The player only ever handles main blocks. You
@@ -48,10 +66,6 @@ compose them from a dozen parts forever.
 **The one rule that makes it assemble** is the socket ladder: four deck levels
 are the only heights at which anything may cross a block boundary. Constrain the
 joins absolutely and let the middle of a block be as mad as it likes.
-
-You place architectural blocks — piers, arches, vaults, stairs, catwalks,
-gantries, chains — on a 3-D lattice. The world is not shaded and then filtered;
-it is **engraved**. Every tone on the sheet is made of line.
 
 ```bash
 npm run serve      # http://localhost:8749
@@ -131,7 +145,10 @@ node tools/moduleshot.mjs --module bay --run 3
 `moduleshot` reports how many faces cancelled, because that number is the
 difference between one big object and several small ones pretending.
 
-## The one idea
+## The one idea behind the engraver
+
+> This section describes `skin: 'hatch'`, which is no longer the game's look.
+> It is kept because the renderer is kept — see **Two skins** above.
 
 **In an etching, tone *is* line.** There is no grey; there is bitten line at a
 spacing and a width, and everything else is paper. So the renderer is not a 3-D

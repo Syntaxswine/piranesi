@@ -59,6 +59,27 @@ export const THIN_WARMTH = 10;
 /** A whisper of overall film, so the ground is never quite the page. */
 export const PLATE_TONE = 0.022;
 
+/* ------------------------------------------------------- the stone band ---- */
+
+/**
+ * MIDDLE GREY, and the range it is allowed to move in.
+ *
+ * The owner asked for "a middle grey with a stone texture", and the engraved
+ * renderer's own tone curve does not give you that: it was built for an etching,
+ * where the point is bare paper against near-solid black and the middle is used
+ * sparingly.  Handed straight to a fill, that curve puts lit faces at nearly
+ * white and shaded ones at nearly black, and the model reads as painted card.
+ *
+ * So the stone skin remaps the whole range into a band that never reaches either
+ * end.  A lit face is a light grey, a soffit is a dark grey, and NOTHING is
+ * paper and nothing is black — which is what a printed stone block looks like,
+ * and what leaves room for the layer bands to be the loudest signal on screen.
+ */
+export const STONE_LOW = 0.24;
+export const STONE_HIGH = 0.74;
+
+export const stoneRange = (t) => STONE_LOW + t * (STONE_HIGH - STONE_LOW);
+
 /* ---------------------------------------------------------- the bands ------ */
 
 /**

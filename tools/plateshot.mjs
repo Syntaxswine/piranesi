@@ -64,6 +64,7 @@ const opts = {
   hatching: passes === 'all' || passes.includes('hatch'),
   coursing: passes === 'all' || passes.includes('course'),
 };
+opts.skin = arg('--skin', 'stone');   // --skin hatch for the line engraver
 if (arg('--target', null)) opts.hatchTarget = Number(arg('--target'));
 
 const eng = new Engraver({ width: W, height: H, ss });
