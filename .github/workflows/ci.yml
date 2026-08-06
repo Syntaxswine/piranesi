@@ -1,0 +1,32 @@
+# Tests only.
+#
+# DEPLOYMENT IS NOT DONE HERE.  GitHub Pages serves this repo's main branch
+# directly through its own builder; there is no build step and nothing to
+# generate, so a deploy workflow would only be a slower way of copying files.
+# (An Actions-based deploy was tried first and its `deploy-pages` step hung at
+# `deployment_in_progress` until it timed out, twice, on a freshly created and
+# then a freshly re-created Pages site. The legacy builder plus a `.nojekyll`
+# file — which is what the sibling projects use — went green first time.)
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # No install step: there are no dependencies and there will not be any.
+      - run: node --test "test/*.test.mjs"
+      # The instruments are part of the deliverable, so they have to keep
+      # running too — a broken plateshot means the next agent draws blind.
+      - run: node tools/tonecheck.mjs --steps 8
+      - run: node tools/plateshot.mjs --scene bay --size 300x300 --out /tmp/bay.png
+      - run: node tools/moduleshot.mjs --module great-vault --size 300x260 --out /tmp/gv.png
