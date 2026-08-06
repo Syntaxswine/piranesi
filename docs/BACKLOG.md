@@ -4,20 +4,39 @@
 > `HANDOFF-2026-08-06.md` first — the game changed shape and some items below
 > changed meaning with it.
 >
-> **Now live at the top of the list, ahead of everything here:**
+> **Updated again 2026-08-06, after the layer view landed.**
 >
-> 0a. **The layer view** — build mode, current layer full, above ghosted, below
-> shadowed. Blocked on the open question in the handoff §8: *what does ghosted
-> mean in an ink medium?* Do not guess it.
-> 0b. **`ResizeObserver` on the stage.** The canvas sizes from an unsettled
-> layout and comes up 28×320 — the owner saw a blank page. One line.
-> 0c. **Mode switch**, build ↔ explore.
-> 0d. **Delete the dead files** (`blocks.js`, `modules.js`, `scenes.js`,
-> `main.js`) once the new game runs — not before; they are the only working
-> reference for how `World` and `Engraver` are driven.
-> 0e. **Block quality.** The composer works; the masses are plain boxes. They
-> want relief, wear and ornament, and six archetypes want to be ten. Check
-> `blockshot --run 3` joinery for every archetype.
+> ~~0a. The layer view~~ — **DONE.** The owner answered the open question and it
+> is a *value range*, not a drawing mode: ghosts 0–30, layers below base +30…40.
+> Built as a tone transform ahead of the hatcher (`js/palette.js`), not a
+> composite. Handoff §8 and §10.
+> ~~0b. `ResizeObserver`~~ — **DONE.** `js/game.js`, at the top, with the story
+> beside it.
+> ~~0c. Mode switch~~ — **DONE.** `js/build.js` holds both cameras.
+> 0d. **Delete the dead files.** `main.js` is gone. `blocks.js`, `modules.js`
+> and `scenes.js` are still load-bearing for `plateshot`, `moduleshot` and two
+> tests; they go when those instruments are ported to composed blocks.
+>
+> **0e is now the top of the list, and it got sharper:**
+>
+> **Composed blocks never cancel a face against each other.** `cancelled` is 0
+> for any run of composed blocks, where a sliced module reports 428. The tagging
+> is fine — 5107 of 16648 catalogue faces carry a `side` — but two neighbours
+> only cancel where their boundary faces occupy the *same place*, and
+> procedurally different masses never do. So a row of blocks is a row of
+> separate boxes rather than one continuous interior, and coincidence culling —
+> the thing that turns a colonnade into a tunnel — never fires at all. **This is
+> the biggest single obstacle to "one vast interior", and it is a block-design
+> problem, not a renderer one.** The socket ladder says where things may *cross*
+> a boundary; nothing yet makes the boundary a shared surface. Options worth
+> weighing: a mandatory full-face wall option per side; snapping mass extents to
+> a coarse boundary grid; or a declared "edge profile" per side, chosen from a
+> small set, that neighbours match.
+>
+> Then the rest of 0e as before: the masses are plain boxes wanting relief, wear
+> and ornament, and six archetypes want to be ten. Also — the build view has no
+> enclosure, so every face sees the whole sky and the tonal range starts low. An
+> interior wants a shell.
 >
 > **Changed meaning:** items about hand-authored cubes and the sliced-vault tile
 > system (`modules.js`) are superseded — main blocks are *composed* now, not

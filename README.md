@@ -13,18 +13,31 @@ snaking through a labyrinth.
 > ### ⚠ Mid-rewrite
 >
 > The game was redirected on 2026-08-06 from a free-flight 3-D builder to this
-> layer-by-layer one. **The published site still serves the old game**, and four
-> files in `js/` are dead. The block composer and both cameras are new and work;
-> the layer view and the UI are not built yet.
+> layer-by-layer one. It **runs** — build mode, explore mode, the layer stack —
+> but three files in `js/` are dead and the published site may still be serving
+> the old game. Blocks are still plain masses wanting relief and ornament.
 >
 > **Start at [`docs/HANDOFF-2026-08-06.md`](docs/HANDOFF-2026-08-06.md).** It is
-> the keystone: what the game is, the laws, every trap already paid for, and the
-> one open question that should not be guessed.
+> the keystone: what the game is, the laws, every trap already paid for, and
+> §10 for the four faults that only a measuring instrument found.
 
 **Two modes.** *Build* is a rotatable three-quarter overhead view of the model —
 you place on one flat layer, the layer above is ghosted and the one below is
 shadowed. *Explore* puts you inside the space, where the camera never pitches
 and the picture is a plate.
+
+**The layer bands are a tone transform, not a composite.** A ghosted face asks
+the hatcher for a third of its tone and the hatcher draws a third of the line,
+so the layer above costs a fraction of a real one. Range, on a 0–100 scale where
+0 is white: ghosts live in **0–30**, the layers below sit at **base +30…40**.
+`js/palette.js` owns all of it, and `tools/layershot.mjs` reports what each band
+asked for beside what it actually delivered.
+
+**Warm and cool neutrals define space.** Not one ink but two near-blacks — a warm
+brown and a cool grey — mixed per pixel from the orientation of the surface
+underneath. A face turned to the light takes the warm one and a face turned away
+takes the cool, so a block has a near side and a far side before any tone is laid
+at all. There is no colour anywhere in the palette.
 
 **Blocks are composed, not drawn.** A vocabulary of sub-blocks — pier, archway,
 stair, catwalk, balustrade, drum, gantry, chain — is assembled by seeded
@@ -42,8 +55,12 @@ it is **engraved**. Every tone on the sheet is made of line.
 
 ```bash
 npm run serve      # http://localhost:8749
-npm test           # 16 laws
+npm test           # 24 laws
 npm run shot       # pull an impression, headless, to docs/shots/
+```
+
+```bash
+node tools/layershot.mjs --layers 3 --layer 1
 ```
 
 ---

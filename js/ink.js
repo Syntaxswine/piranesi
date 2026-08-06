@@ -23,28 +23,12 @@
 // agent that cannot see its own art draws blind.
 
 /* ------------------------------------------------------------- materials -- */
+/* The palette itself lives in palette.js — this file owns the ink MODEL and the
+ * printing, not the colours.  Kept re-exported so nothing has to know where the
+ * swatches moved to. */
 
-/** Warm cream laid paper, sampled off museum scans: about #F2E6CF inside the
- *  platemark.  Not white — a white ground makes the ink read as blue-black and
- *  kills it — but not the tea-stained brown people reach for either. */
-export const PAPER = [242, 230, 207];
-
-/**
- * The ink is a WARM NEAR-BLACK, and the thing to resist is rendering Piranesi in
- * sepia.  Measurement off real impressions: about #2C2316 where the film is
- * thin, #232019 where it is dense — that is, the ink gets *warmer as it gets
- * thinner*, red-minus-blue falling from +22 to +10 as density rises.  So the
- * two ends are given separately and `develop` interpolates between them by how
- * much ink is actually on the pixel.  A single flat ink colour is the tell that
- * somebody picked brown out of a swatch.
- */
-export const INK = [44, 35, 22];
-export const INK_DENSE = [35, 32, 25];
-
-/** Plate tone: the film of ink the printer leaves on the plate surface outside
- *  the bitten lines.  Tiny, global, and the reason a real impression is never
- *  as bright as its paper. */
-export const PLATE_TONE = 0.035;
+export { PAPER, INK_WARM, INK_COOL, PLATE_TONE } from './palette.js';
+import { PAPER, INK_WARM, INK_COOL, PLATE_TONE, THIN_WARMTH, inkAt } from './palette.js';
 
 /* ------------------------------------------------------------- the plate -- */
 
@@ -198,13 +182,19 @@ export class Plate {
   /**
    * Pull an impression: transmittance → RGBA, boxing down the supersample.
    *
-   *   observed = paper·T + ink·(1−T)
+   *   observed = ground·T + ink(warmth)·(1−T)
+   *
+   * THE INK COLOUR IS PER PIXEL, and that is the only interesting thing here.
+   * A single flat ink gives you a monochrome drawing; two near-blacks chosen
+   * one warm and one cool, mixed by how the surface under the pixel is lit,
+   * give you a muted neutral palette that separates a sky-lit floor from a
+   * bounce-lit vault without ever reaching for a colour.  See palette.js.
    *
    * @param {object} opts
-   *   grain      0..1 strength of the laid-paper texture
-   *   plateTone  overall film of ink left on the plate
-   *   margin     px of bare paper around the image, in OUTPUT pixels; the plate
-   *              mark is drawn just inside it
+   *   warmth     Float32Array, one value per OUTPUT pixel in [−1,+1]; −1 cool,
+   *              +1 warm.  Omit and the whole sheet takes the neutral middle.
+   *   grain      0..1 strength of the paper texture
+   *   plateTone  overall film of ink left on the ground
    */
   develop(opts = {}) {
     const { w, h } = this.out;
@@ -212,10 +202,10 @@ export class Plate {
     const grain = opts.grain ?? 1;
     const tone = opts.plateTone ?? PLATE_TONE;
     const paper = opts.paper || PAPER;
-    const ink = opts.ink || INK;
-    const dense = opts.inkDense || INK_DENSE;
+    const warmth = opts.warmth || null;
     const px = new Uint8ClampedArray(w * h * 4);
     const inv = 1 / (ss * ss);
+    const ink = [0, 0, 0];
 
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
@@ -225,28 +215,29 @@ export class Plate {
           const row = (y0 + sy) * W + x0;
           for (let sx = 0; sx < ss; sx++) acc += T[row + sx];
         }
-        let t = acc * inv * (1 - tone);
+        const t = acc * inv * (1 - tone);
+        const o = y * w + x;
 
-        // Laid paper.  Two frequencies, because that is what laid paper is: the
-        // fine LAID lines from the mould's close-set wires, and the CHAIN lines
-        // every 25mm or so where the wires are sewn to the ribs.  Both are
-        // brightness variations in the sheet, so they modulate the paper, never
-        // the ink.
+        // Paper texture, two frequencies, and it modulates the GROUND only —
+        // never the ink.  A texture that also dirties the ink reads as a filter
+        // over the picture instead of a surface under it.
         let p = 1;
         if (grain > 0) {
-          const laid = Math.sin(y * 0.9) * 0.006 + Math.sin(y * 2.7 + 1.3) * 0.003;
-          const chain = Math.sin(x * 0.045) > 0.985 ? 0.018 : 0;
+          const broad = Math.sin(y * 0.9) * 0.004 + Math.sin(x * 0.7 + 1.3) * 0.003;
           const fibre = ((x * 92837111) ^ (y * 689287499)) & 255;
-          p = 1 + (laid + chain + (fibre / 255 - 0.5) * 0.014) * grain;
+          p = 1 + (broad + (fibre / 255 - 0.5) * 0.011) * grain;
         }
 
-        // The ink warms as it thins: blend the two measured ink colours by how
-        // much of this pixel is actually inked.
         const d = 1 - t;
-        const i = (y * w + x) * 4;
-        px[i] = paper[0] * p * t + (ink[0] + (dense[0] - ink[0]) * d) * d;
-        px[i + 1] = paper[1] * p * t + (ink[1] + (dense[1] - ink[1]) * d) * d;
-        px[i + 2] = paper[2] * p * t + (ink[2] + (dense[2] - ink[2]) * d) * d;
+        inkAt(warmth ? warmth[o] : 0, ink);
+        // Ink warms as the film thins.  True of any printed ink, and it is the
+        // difference between a palette that reads as printed and one that reads
+        // as filled with a colour picker.
+        const thin = THIN_WARMTH * (1 - d);
+        const i = o * 4;
+        px[i] = paper[0] * p * t + (ink[0] + thin) * d;
+        px[i + 1] = paper[1] * p * t + ink[1] * d;
+        px[i + 2] = paper[2] * p * t + (ink[2] - thin * 0.6) * d;
         px[i + 3] = 255;
       }
     }

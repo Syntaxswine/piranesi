@@ -14,6 +14,9 @@ import { Engraver } from '../js/engrave.js';
 import { Plate } from '../js/ink.js';
 import { buildScene, scenes, catalogFor } from '../js/scenes.js';
 import { buildModules, stampCompound, MODULE } from '../js/modules.js';
+import { bandTone, bandLine } from '../js/palette.js';
+import { buildCatalog as buildCatalog2 } from '../js/compose.js';
+import { bandFor, buildCamera, LAYER } from '../js/build.js';
 
 const catalog = buildCatalog();
 
@@ -307,4 +310,82 @@ test('the tone transfer curve is monotonic', () => {
     prev = ink;
   }
   assert.ok(prev > 0.75, `the darkest register only reached ${prev.toFixed(3)} ink`);
+});
+
+/* ------------------------------------------------------------ the layers -- */
+
+test('the layer bands hold the owner\'s numbers: ghost 0–30, below base+30…40', () => {
+  // The spec, verbatim: "if the full tonal range went from 0-100 with 0 being
+  // pure white and 100 being black, the values of the ghost layers would be
+  // from 0-30 and the dark layers would be base value +30 to 40."
+  for (const base of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+    for (const up of [1, 2, 3, 4]) {
+      const g = bandTone(base, up);
+      assert.ok(g > 0 && g <= 0.30, `a layer ${up} up drew at ${(g * 100).toFixed(0)}, outside 0–30`);
+    }
+    for (const down of [1, 2, 3, 4]) {
+      const d = bandTone(base, -down);
+      const lift = (d - bandTone(base, 0)) * 100;
+      assert.ok(d >= bandTone(base, 0), 'a layer below must never be lighter than the working layer');
+      assert.ok(d >= 1 - 1e-9 || (lift >= 29.9 && lift <= 40.1),
+        `a layer ${down} down lifted by ${lift.toFixed(0)}, outside 30–40`);
+    }
+  }
+});
+
+test('explore mode has no layers, so it must not band the tone at all', () => {
+  // A null band and a zero band are different states.  Zero is "the layer you
+  // are working on", which is drawn with headroom so the layer below has
+  // somewhere to be darker; null is "there are no layers here", and inside the
+  // building the stone must be as dark as the stone is.
+  for (const t of [0.1, 0.44, 0.8]) {
+    assert.equal(bandTone(t, null), t, 'explore mode repainted the stone');
+    assert.ok(bandTone(t, 0) < t, 'the working layer must keep headroom');
+  }
+  assert.equal(bandLine(null), 1);
+});
+
+test('a ghosted layer does not hide the layer being worked on', () => {
+  // THE WHOLE POINT OF THE SECOND PASS.  Ghosting exists so you can see what is
+  // above you; if the layers above shared the working layer's stencil they
+  // would occlude the thing you are trying to build on, and the feedback would
+  // be worse than none.
+  const cat = buildCatalog2(6, 1);
+  const ids = [...cat.keys()];
+  const w = new World(cat);
+  w.place(0, 0, 0, ids[0]);
+  const cam = new Camera({});
+  buildCamera(cam, { centre: [LAYER / 2, LAYER / 2], layer: 0, yaw: 0.8, zoom: 1, width: 220, height: 160 });
+  const eng = new Engraver({ width: 220, height: 160, ss: 1 });
+
+  const alone = eng.render(w, cam, cat, { bandOf: bandFor(0) });
+  // A lid right over the working block, seen from a camera looking down at it.
+  w.place(0, 0, LAYER, ids[1]);
+  const under = eng.render(w, cam, cat, { bandOf: bandFor(0) });
+
+  assert.ok(under.ghosted > 0, 'the layer above was not drawn as a ghost at all');
+  assert.ok(under.visible >= alone.visible * 0.9,
+    `the working layer lost ${alone.visible - under.visible} of ${alone.visible} faces behind a ghost`);
+});
+
+test('no face ever asks the hatcher for a tone of NaN', () => {
+  // It happened, and it was silent.  Iron carries a +0.28 material bias on top
+  // of a value already near 1 on an unlit face, so tone went over 1, `1 − t`
+  // went negative, and a fractional power of a negative number is NaN.  NaN
+  // fails every comparison, so it sails through the hatcher's own "too light to
+  // draw" guard and comes out as strokes of NaN width: the ironwork on the
+  // darkest faces was simply MISSING, and no picture said so.
+  const cat = buildCatalog2(12, 1);
+  const ids = [...cat.keys()];
+  const w = new World(cat);
+  let k = 0;
+  for (let L = 0; L < 2; L++) for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) {
+    w.place(x * LAYER, y * LAYER, L * LAYER, ids[(k++ * 3) % ids.length]);
+  }
+  const cam = new Camera({});
+  buildCamera(cam, { centre: [LAYER, LAYER], layer: 0, yaw: 0.8, zoom: 1, width: 240, height: 170 });
+  const eng = new Engraver({ width: 240, height: 170, ss: 1 });
+  eng.render(w, cam, cat, { bandOf: bandFor(0) });
+  const bad = eng.faceTone.filter((t) => Number.isNaN(t)).length;
+  assert.equal(bad, 0, `${bad} faces asked for a tone of NaN and drew nothing`);
 });

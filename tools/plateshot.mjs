@@ -68,7 +68,7 @@ if (arg('--target', null)) opts.hatchTarget = Number(arg('--target'));
 
 const eng = new Engraver({ width: W, height: H, ss });
 const r = eng.render(world, cam, catalog, opts);
-const img = eng.plate.develop({ grain: Number(arg('--grain', '1')) });
+const img = eng.plate.develop({ grain: Number(arg('--grain', '1')), warmth: eng.warmth });
 
 /** `--crop x,y,w,h` — cut a window out of the developed impression, so a fault
  *  can be looked at at its own scale instead of guessed at from a thumbnail. */
@@ -90,7 +90,7 @@ const bytes = writePNG(out, final.data, final.width, final.height);
 console.log(`${out}  ${W}x${H}@${ss}x  ${(bytes / 1024).toFixed(0)} kB`);
 console.log(`  blocks ${world.size}  faces ${r.faces}  cancelled ${r.cancelled}  hatch strokes ${r.hatchLines}`);
 console.log(`  mean ink ${(r.ink * 100).toFixed(1)}%   ` +
-  `stencil ${r.ms.stencil.toFixed(0)}ms  tone ${r.ms.tone.toFixed(0)}ms  lines ${r.ms.lines.toFixed(0)}ms  total ${r.ms.total.toFixed(0)}ms`);
+  `solid ${r.ms.solid.toFixed(0)}ms  ghost ${r.ms.ghost.toFixed(0)}ms  total ${r.ms.total.toFixed(0)}ms`);
 
 if (has('--stats')) {
   const h = eng.plate.histogram(10);

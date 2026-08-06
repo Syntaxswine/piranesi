@@ -30,3 +30,6 @@ jobs:
       - run: node tools/tonecheck.mjs --steps 8
       - run: node tools/plateshot.mjs --scene bay --size 300x300 --out /tmp/bay.png
       - run: node tools/moduleshot.mjs --module great-vault --size 300x260 --out /tmp/gv.png
+      - run: node tools/blockshot.mjs --n 4 --cols 2 --size 300x260 --out /tmp/blocks.png
+      # layershot is the one that would notice the layer feedback going flat.
+      - run: node tools/layershot.mjs --layers 3 --layer 1 --size 320x220 --out /tmp/layers.png

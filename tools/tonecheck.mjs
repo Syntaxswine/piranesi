@@ -61,14 +61,32 @@ for (let i = 0; i <= STEPS; i++) {
   void r;
 }
 
-// The two numbers worth acting on.
-let worst = 0, sum = 0, mono = true;
+// The numbers worth acting on.
+//
+// SATURATION IS FOUND FIRST, AND THE PLATEAU IS EXCLUDED FROM THE MONOTONIC
+// TEST.  Above some tone the plate is as black as this hatcher can make it and
+// the curve goes flat; inside that flat stretch the achieved ink wanders by
+// fractions of a percent, and a strict test calls that "a darker request
+// produced a lighter plate" and sends the next reader hunting a bug that is
+// really a ceiling.  An instrument that cries wolf at its own resolution limit
+// gets ignored, and this is the one instrument in the repo that catches faults
+// no picture shows.
+const GAIN = 0.004;                       // a rise smaller than this is noise
+let sat = null;
+for (let i = 1; i < rows.length; i++) {
+  if (rows[i][1] - rows[i - 1][1] < GAIN) { if (sat === null) sat = rows[i - 1][0]; }
+  else sat = null;                        // it climbed again; not the ceiling
+}
+let worst = 0, sum = 0, mono = true, at = null;
 for (let i = 0; i < rows.length; i++) {
   const e = Math.abs(rows[i][1] - rows[i][0]);
   sum += e;
   if (e > worst) worst = e;
-  if (i && rows[i][1] < rows[i - 1][1] - 1e-4) mono = false;
+  if (sat !== null && rows[i][0] > sat) continue;             // inside the ceiling
+  if (i && rows[i][1] < rows[i - 1][1] - GAIN) { mono = false; at = rows[i][0]; }
 }
 console.log('');
-console.log(`  mean |error| ${(sum / rows.length).toFixed(3)}   worst ${worst.toFixed(3)}   monotonic ${mono ? 'yes' : 'NO — a darker request produced a lighter plate'}`);
-console.log(`  saturates at ${rows.filter((r) => r[1] > 0.97).length ? rows.find((r) => r[1] > 0.97)[0].toFixed(2) : 'never'}`);
+console.log(`  mean |error| ${(sum / rows.length).toFixed(3)}   worst ${worst.toFixed(3)}` +
+  `   monotonic below the ceiling: ${mono ? 'yes' : `NO — ${at.toFixed(3)} drew lighter than the step before it`}`);
+console.log(`  saturates at ${sat === null ? 'never — the curve is still climbing at 1.0' :
+  `${sat.toFixed(3)} (achieved ${rows.find((r) => r[0] === sat)[1].toFixed(3)}); above this the plate cannot go darker`}`);

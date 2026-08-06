@@ -17,6 +17,7 @@
 // no post-process anywhere in this repo.
 
 import { Plate } from './ink.js';
+import { bandTone, bandLine, faceWarmth } from './palette.js';
 import { projectWith, hash32, hashf, hashs, norm, cross, sub } from './math.js';
 import { MATERIALS } from './mesh.js';
 import { turnY, translate } from './mesh.js';
@@ -222,6 +223,15 @@ function faceTone(n, mat, fog, sky, keyVis) {
   const lum = SKY_W * sky + KEY_W * lambert * keyVis + bounce + AMBIENT_SKY * sky;
   let t = 1 - lum;
   t += MATERIALS[mat] ? MATERIALS[mat].tone : 0;
+  // CLAMP BEFORE THE CURVE, NOT AFTER.  The material bias is added to a value
+  // that is already near 1 on an unlit face, and iron carries +0.28 — so t goes
+  // over 1, `1 − t` goes negative, and `Math.pow(negative, 1.45)` below is NaN.
+  // A NaN tone does not throw and does not draw: it sails through the hatcher's
+  // `tone <= paperBelow` guard (every comparison against NaN is false) and comes
+  // out as strokes of NaN width, so the ironwork on the darkest faces was simply
+  // MISSING and nothing said so.  Thirty-one faces of fourteen blocks.  Found by
+  // auditing the per-band tone table, not by looking at a picture.
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
 
   // Contrast about a pivot below the middle — the darks are the subject.
   //
@@ -246,10 +256,20 @@ function faceTone(n, mat, fog, sky, keyVis) {
 
 /* --------------------------------------------------------- face gathering */
 
-function instances(world, catalog) {
+/**
+ * @param blocks   the blocks THIS PASS draws.  The build view renders in two
+ *   passes — the working layer with everything under it, then the layers above
+ *   it as ghosts — and each pass gets its own set, its own stencil and its own
+ *   cancellation.  Cancelling ACROSS passes would be the obvious economy and it
+ *   is wrong: a ghosted block sitting on the working layer would delete the
+ *   working layer's top face, and the layer you are actually building on has to
+ *   read as a whole solid object.
+ * @param faceId   where to start numbering, so two passes share one id space
+ *   and one faceBlock table.
+ */
+function instances(world, catalog, blocks, faceId = 0) {
   const out = [];
-  let faceId = 0;
-  for (const b of world.blocks.values()) {
+  for (const b of blocks) {
     const def = catalog.get(b.id);
     if (!def) continue;
     const [ax, ay] = def.size;
@@ -292,7 +312,7 @@ function instances(world, catalog) {
     });
     out.push({ block: b, verts, faces, edges: mesh.edges });
   }
-  return out;
+  return { list: out, nextId: faceId };
 }
 
 /**
@@ -481,6 +501,9 @@ export class Engraver {
     this.width = width;
     this.height = height;
     this.ss = ss;
+    /** Per output pixel, where the surface under it sits on the warm↔cool axis.
+     *  Written from the stencil after tone is known; read once by `develop`. */
+    this.warmth = new Float32Array(width * height);
     /** tone → duty table, and scratch for the per-stroke family weights. */
     this._duty = buildDutyTable();
     this._fw = new Float32Array(LAYERS.length);
@@ -490,10 +513,26 @@ export class Engraver {
     if (width === this.width && height === this.height) return this;
     this.plate = new Plate(width, height, this.ss);
     this.depth = new Depth(width, height);
+    this.ghostDepth = null;
+    this.warmth = new Float32Array(width * height);
     this.width = width; this.height = height;
     return this;
   }
 
+  /**
+   * THE TWO PASSES.
+   *
+   * In explore mode there is one pass and this is the renderer it always was.
+   * In build mode there are two: the working layer and everything below it,
+   * then — over the top, with its own stencil — the layers above, drawn faint.
+   *
+   * The second stencil is the point.  If the layers above shared the first
+   * one they would occlude the layer you are trying to build on, which is
+   * exactly what the ghosting exists to prevent.  Nothing is composited: the
+   * ghost pass lays its (much thinner) ink onto the same plate, and because ink
+   * is transmittance, a ghost crossing a solid darkens it slightly, which is
+   * what a line drawn over a drawing does.
+   */
   render(world, camera, catalog, opts = {}) {
     const O = { ...DEFAULTS, ...opts };
     const t0 = now();
@@ -501,14 +540,55 @@ export class Engraver {
     const c = camera.snapshot();
     this.plate.clear();
     this.depth.clear();
-
-    const insts = instances(world, catalog);
-    const cancelled = cancelCoincident(insts);
+    this.warmth.fill(0);
     // faceId → the block it belongs to.  This is what makes picking exact and
     // free: the stencil already knows which face is under every pixel, so the
     // cursor never needs a ray/box intersection routine at all.
     this.faceBlock = [];
     this.faceNormal = [];
+    this.faceTone = [];
+
+    // NULL, not 0.  "No layers here" and "on the working layer" are different
+    // states: explore mode must draw the stone at its own value, while the
+    // working layer is drawn with headroom so the layer below it has somewhere
+    // to be darker.  See palette.js LIVE_HEAD.
+    const bandOf = O.bandOf || (() => null);
+    const solid = [], ghost = [];
+    for (const b of world.blocks.values()) (bandOf(b) > 0 ? ghost : solid).push(b);
+
+    const A = instances(world, catalog, solid, 0);
+    const cancelled = cancelCoincident(A.list);
+    const rA = this._pass(world, A.list, c, O, bandOf);
+
+    let rB = { faces: 0, visible: 0, hatchLines: 0 };
+    if (ghost.length) {
+      const G = instances(world, catalog, ghost, A.nextId);
+      cancelCoincident(G.list);
+      if (!this.ghostDepth) this.ghostDepth = new Depth(this.width, this.height);
+      this.ghostDepth.clear();
+      // Swap the active stencil rather than threading one through twenty call
+      // sites.  `this.depth` stays the SOLID buffer afterwards, which is what
+      // picking reads — you build on the working layer, never on a ghost.
+      const solidDepth = this.depth;
+      this.depth = this.ghostDepth;
+      rB = this._pass(world, G.list, c, O, bandOf);
+      this.depth = solidDepth;
+    }
+    const tEnd = now();
+
+    return {
+      faces: rA.faces + rB.faces,
+      visible: rA.visible + rB.visible,
+      ghosted: rB.visible,
+      cancelled,
+      hatchLines: rA.hatchLines + rB.hatchLines,
+      ms: { total: tEnd - t0, solid: rA.ms, ghost: rB.ms || 0 },
+      ink: this.plate.meanInk(),
+    };
+  }
+
+  _pass(world, insts, c, O, bandOf) {
+    const t0 = now();
     for (const inst of insts) for (const f of inst.faces) {
       this.faceBlock[f.id] = inst.block;
       this.faceNormal[f.id] = f.n;
@@ -568,13 +648,27 @@ export class Engraver {
     // this is most of the scene.
     const seen = new Set(this.depth.id);
     const visible = draw.filter(({ f }) => seen.has(f.id));
-    const tStencil = now();
+
+    // AERIAL PERSPECTIVE IS MEASURED FROM THE NEAREST THING DRAWN, NOT FROM THE
+    // EYE.  It has to be, now that there are two cameras.  The build camera
+    // stands 420 cells back with a long lens so that the view is near
+    // orthographic — which put the entire model past `fogDepth`, so every face
+    // was drawn at maximum haze: the thinnest needle, the fewest hatch families,
+    // and tone knocked back 22%.  The layer bands then could not separate,
+    // because a band asking for value 60 was being drawn with the equipment for
+    // value 20.  Depth in a picture is depth THROUGH THE SUBJECT; how far the
+    // draughtsman stands back is not part of it.
+    let z0 = Infinity;
+    for (const { f } of visible) if (f.zavg < z0) z0 = f.zavg;
+    this._z0 = z0 = (z0 === Infinity ? 0 : z0);
 
     /* ---- 4 & 5 & 6 ------------------------------------------------------- */
     let hatchLines = 0;
+    const warmById = new Map();
     if (O.hatching || O.coursing) {
       for (const { inst, f } of visible) {
-        const fog = clamp01(f.zavg / O.fogDepth);
+        const band = bandOf(inst.block);
+        const fog = clamp01((f.zavg - z0) / O.fogDepth);
         // Must match world.js's anchor key exactly, or every ray is blocked by
         // the block it started from and the whole world renders black.
         const self = `${inst.block.layer || 'structure'}|${inst.block.x},${inst.block.y},${inst.block.z}`;
@@ -589,25 +683,38 @@ export class Engraver {
           f.toneValue = O.forceTone;
           f.toneAt = () => O.forceTone;
         } else {
-          f.toneValue = faceTone(f.n, f.mat, fog, mSky, mKey) + (f.tone || 0);
+          // THE LAYER BAND IS APPLIED HERE, BEFORE A SINGLE STROKE IS DRAWN.
+          // A ghosted face asks the hatcher for a third of its tone and the
+          // hatcher draws a third of the line — so ghosting is not only
+          // correct, it is most of the cost of a layer given back.  palette.js.
+          f.toneValue = bandTone(faceTone(f.n, f.mat, fog, mSky, mKey) + (f.tone || 0), band);
           f.toneAt = (p) => {
             const L = lightAt(f.skySamples, p);
-            return clamp01(faceTone(f.n, f.mat, fog, L.sky, L.key) + (f.tone || 0));
+            return clamp01(bandTone(faceTone(f.n, f.mat, fog, L.sky, L.key) + (f.tone || 0), band));
           };
         }
+        // A ghost is drawn faint, so it is also drawn NEUTRAL: pushing a barely
+        //-there layer warm or cool would make the layer above read as a
+        // different material rather than as a different height.
+        warmById.set(f.id, band > 0 ? 0 : faceWarmth(f.n, mSky));
+        this.faceTone[f.id] = f.toneValue;      // what the instruments audit
         if (O.hatching) hatchLines += this.hatch(inst, f, c, f.toneValue, fog, O);
         if (O.coursing) this.course(inst, f, c, f.toneValue, fog, O);
       }
     }
-    const tTone = now();
-    if (O.lines) this.lineWork(insts, c, O);
-    const tLines = now();
+    if (O.lines) this.lineWork(insts, c, O, bandOf);
 
-    return {
-      faces: draw.length, visible: visible.length, cancelled, hatchLines,
-      ms: { stencil: tStencil - t0, tone: tTone - tStencil, lines: tLines - tTone, total: tLines - t0 },
-      ink: this.plate.meanInk(),
-    };
+    // One sweep of the id buffer turns per-face warmth into the per-pixel field
+    // `develop` reads.  Doing it here rather than per face keeps it O(pixels)
+    // instead of O(faces × pixels), and the ghost pass simply overwrites where
+    // its own stencil is set — which is right, because it is drawn over.
+    const id = this.depth.id, wf = this.warmth;
+    for (let i = 0; i < id.length; i++) {
+      const k = id[i];
+      if (k >= 0) { const w = warmById.get(k); if (w !== undefined) wf[i] = w; }
+    }
+
+    return { faces: draw.length, visible: visible.length, hatchLines, ms: now() - t0 };
   }
 
   /* ------------------------------------------------------------ line work */
@@ -622,10 +729,14 @@ export class Engraver {
    * stroke on the plate, because that is what an etcher does — the contour that
    * separates a solid from what is behind it is bitten deepest.
    */
-  lineWork(insts, c, O) {
+  lineWork(insts, c, O, bandOf = () => 0) {
     const P = this.plate, ss = this.ss;
     for (const inst of insts) {
       const eye = [c.ex, c.ey, c.ez];
+      // A ghosted contour at full strength would out-shout the hatching it
+      // belongs to, and the layer above would read as a wireframe laid over the
+      // game rather than as a faint drawing of a block.
+      const lw = bandLine(bandOf(inst.block));
       for (const e of inst.edges) {
         let kind = e.kind;
         let heavy = false;
@@ -656,8 +767,14 @@ export class Engraver {
 
         const a = inst.verts[e.a], b = inst.verts[e.b];
         const seed = (inst.block.x * 73856093) ^ (inst.block.y * 19349663) ^ (inst.block.z * 83492791) ^ (e.a * 2654435761);
+        // A ghost gets a thinner AND fainter needle; a shadowed layer gets a
+        // fatter one at full strength.  Strength is an opacity and must never
+        // exceed 1 — over 1 the transmittance multiply goes negative and the
+        // pixel comes back brighter than paper.  Weight above 1 goes into the
+        // width, which is where an etcher would put it anyway.
         this.strokeWorldEdge(a, b, c, {
-          width: (heavy ? O.silhouetteWidth : O.creaseWidth),
+          width: (heavy ? O.silhouetteWidth : O.creaseWidth) * (lw < 1 ? 0.72 : lw),
+          strength: Math.min(1, lw),
           seed, kind, ss, plate: P, O,
         });
       }
@@ -677,7 +794,8 @@ export class Engraver {
     const depth = this.depth, ss = opt.ss, P = opt.plate;
 
     // Weight falls with distance: the far arcade is drawn with a finer needle.
-    const zmid = 2 / (A[2] + B[2]);
+    // Measured from the nearest face in the pass, for the reason given in _pass.
+    const zmid = 2 / (A[2] + B[2]) - (this._z0 || 0);
     const wgt = opt.width * clamp(1.25 - zmid / (opt.O.fogDepth * 1.4), 0.34, 1.25);
 
     let run = null;
@@ -688,7 +806,7 @@ export class Engraver {
         // the drawing looks like CAD.
         const over = 0.55 + hashf(opt.seed, 11) * 1.9;
         extend(run, over * ss);
-        P.stroke(run, wgt * ss, opt.kind === 'silhouette' ? 0.97 : 0.9, 0.42);
+        P.stroke(run, wgt * ss, (opt.kind === 'silhouette' ? 0.97 : 0.9) * (opt.strength ?? 1), 0.42);
       }
       run = null;
     };
