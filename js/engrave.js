@@ -17,7 +17,7 @@
 // no post-process anywhere in this repo.
 
 import { Plate } from './ink.js';
-import { projectWith, hashf, hashs, norm, cross, sub } from './math.js';
+import { projectWith, hash32, hashf, hashs, norm, cross, sub } from './math.js';
 import { MATERIALS } from './mesh.js';
 import { turnY, translate } from './mesh.js';
 
@@ -258,8 +258,20 @@ function instances(world, catalog) {
     const xf = (p) => move(turn(p));
     const mesh = def.mesh;
 
+    // THE STROKE SEED IS THE BLOCK'S PLACE IN THE WORLD, NOT ITS PLACE IN A LIST.
+    //
+    // `id` below is an incrementing counter and must stay one — it indexes the
+    // stencil buffers, which are rebuilt every frame.  But every wobble, every
+    // ragged stroke end and every omitted masonry perpend is a hash of the
+    // face's identity, and if THAT came from the counter, then adding one block
+    // low in the building would shift every later face's number and re-draw the
+    // hand across the entire plate.  Lay a single paving slab and the whole
+    // drawing shivers.  So the seed is derived from where the block actually
+    // stands and which of its own faces this is; a face keeps its handwriting
+    // for as long as it keeps its address.
+    const blockSeed = hash32(b.x * 73856093, b.y * 19349663, b.z * 83492791);
     const verts = mesh.verts.map(xf);
-    const faces = mesh.faces.map((f) => {
+    const faces = mesh.faces.map((f, localIndex) => {
       const rot = (d) => {
         const a = xf([0, 0, 0]), q = xf(d);
         return [q[0] - a[0], q[1] - a[1], q[2] - a[2]];
@@ -269,6 +281,7 @@ function instances(world, catalog) {
         n: rot(f.n), hatchDir: rot(f.hatchDir),
         uW: rot(f.uAxis), vW: rot(f.vAxis),
         id: faceId++,
+        seed: hash32(blockSeed, localIndex * 2654435761),
         block: b,
         /** buried against a neighbour's face — the surface CONTINUES here */
         cancelled: false,
@@ -346,6 +359,29 @@ class Depth {
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return -1;
     return this.id[y * this.w + x];
   }
+  zAt(sx, sy) {
+    const x = sx | 0, y = sy | 0;
+    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return 0;
+    return this.z[y * this.w + x];
+  }
+}
+
+/**
+ * The world point under a pixel, from the stencil.  Inverts the projection:
+ * the buffer holds 1/Z, and X and Y follow from the pixel offset.
+ * @returns null where nothing was drawn.
+ */
+export function unproject(depth, c, sx, sy) {
+  const iz = depth.zAt(sx, sy);
+  if (iz <= 0) return null;
+  const Z = 1 / iz;
+  const X = (sx - c.cx) * Z / c.F;
+  const Y = -(sy - c.cy) * Z / c.F;
+  return [
+    c.ex + c.rx * X + c.fx * Z,
+    c.ey + c.ry * X + c.fy * Z,
+    c.ez + Y,
+  ];
 }
 
 /** Clip a camera-space polygon to Z ≥ NEAR (Sutherland–Hodgman, one plane). */
@@ -464,6 +500,15 @@ export class Engraver {
 
     const insts = instances(world, catalog);
     const cancelled = cancelCoincident(insts);
+    // faceId → the block it belongs to.  This is what makes picking exact and
+    // free: the stencil already knows which face is under every pixel, so the
+    // cursor never needs a ray/box intersection routine at all.
+    this.faceBlock = [];
+    this.faceNormal = [];
+    for (const inst of insts) for (const f of inst.faces) {
+      this.faceBlock[f.id] = inst.block;
+      this.faceNormal[f.id] = f.n;
+    }
 
     /* ---- 3. the stencil -------------------------------------------------- */
     const draw = [];                       // faces that survived, with screen data
@@ -779,8 +824,8 @@ export class Engraver {
         // pixels and on a wall four cells long is a finger's width, so every
         // block boundary in the building came back as a pale gutter and the
         // lattice was visible in the drawing.
-        const bite = (0.8 + 2.2 * hashf(f.id, k, li)) / pxPerUnit;
-        const bite2 = (0.8 + 2.2 * hashf(f.id, k, li + 97)) / pxPerUnit;
+        const bite = (0.8 + 2.2 * hashf(f.seed, k, li)) / pxPerUnit;
+        const bite2 = (0.8 + 2.2 * hashf(f.seed, k, li + 97)) / pxPerUnit;
         if (a1 - a0 > (bite + bite2) * 2.5) { a0 += bite; a1 -= bite2; }
         if (a1 <= a0) continue;
 
@@ -797,8 +842,8 @@ export class Engraver {
           width,
           strength: 0.95 + 0.05 * bluntness,
           taper: 0.72 * (1 - bluntness),
-          seed: (f.id * 131 + k * 7 + li) | 0,
-          arc: (hashs(f.id, k, li + 41)) * 0.010 * (a1 - a0),
+          seed: (f.seed * 131 + k * 7 + li) | 0,
+          arc: (hashs(f.seed, k, li + 41)) * 0.010 * (a1 - a0),
         });
         count++;
       }
@@ -918,9 +963,9 @@ export class Engraver {
       // is the CAD tell — it is the single mark a hand never makes.  Piranesi's
       // joints fade in and out along their length, and the gaps are most of what
       // makes the stone read as stone rather than as a grid drawn on it.
-      for (const [a0, a1] of brokenSpan(span[0], span[1], f.id * 31 + k)) {
+      for (const [a0, a1] of brokenSpan(span[0], span[1], f.seed * 31 + k)) {
         this.strokeHatch(origin, along, upDir, a0, a1, bb, c,
-          { width: w, strength, seed: k * 977 + f.id, arc: hashs(f.id, k, 7) * 0.006 * (a1 - a0) });
+          { width: w, strength, seed: k * 977 + f.seed, arc: hashs(f.seed, k, 7) * 0.006 * (a1 - a0) });
       }
 
       // Perpends, staggered half a block course to course — the bond.  Only on
@@ -933,7 +978,7 @@ export class Engraver {
       for (let j = j0; j <= j1; j++) {
         const a = off + j * per;
         if (a <= span[0] + 1e-3 || a >= span[1] - 1e-3) continue;
-        if (hashf(f.id, k, j + 500) > 0.72) continue;     // not every one is drawn
+        if (hashf(f.seed, k, j + 500) > 0.72) continue;     // not every one is drawn
         const bTop = bOf((k + 1) * H);
         this.strokeHatch(origin, upDir, along, Math.min(bb, bTop), Math.max(bb, bTop), a, c,
           { width: w * 0.8, strength: strength * 0.85, seed: (k * 31 + j) | 0, arc: 0 });
@@ -1009,11 +1054,11 @@ export class Engraver {
     for (const p of pts) { if (p[1] < lo) lo = p[1]; if (p[1] > hi) hi = p[1]; }
     const nLines = 5;
     for (let i = 1; i < nLines; i++) {
-      const bb = lo + (hi - lo) * (i / nLines) + hashs(f.id, i) * (hi - lo) * 0.06;
+      const bb = lo + (hi - lo) * (i / nLines) + hashs(f.seed, i) * (hi - lo) * 0.06;
       const span = spanAt(pts, bb);
       if (!span) continue;
       this.strokeHatch(origin, hd, perp, span[0], span[1], bb, c,
-        { width: O.courseWidth * 0.8, strength: 0.5, seed: f.id * 7 + i, arc: hashs(f.id, i, 3) * 0.02 * (span[1] - span[0]) });
+        { width: O.courseWidth * 0.8, strength: 0.5, seed: f.seed * 7 + i, arc: hashs(f.seed, i, 3) * 0.02 * (span[1] - span[0]) });
     }
   }
 }

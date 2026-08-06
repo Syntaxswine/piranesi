@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carceri — an architectural block game, drawn as an etching</title>
+<style>
+  /* The chrome is a printer's desk, not a game UI: small, monospace, low
+     saturation, everything the colour of paper and ink.  The plate is the
+     spectacle; nothing else is allowed to be. */
+  :root {
+    --paper: #f2e6cf;
+    --desk:  #262019;
+    --ink:   #2c2316;
+    --rule:  #8d8168;
+    --hot:   #963a26;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: var(--desk); color: var(--paper);
+    font: 11px/1.45 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  #app { display: flex; height: 100%; }
+
+  #stage {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    padding: 14px; min-width: 0;
+  }
+  /* The sheet sits on the desk with a shadow, because it is a sheet. */
+  #plate {
+    background: var(--paper);
+    box-shadow: 0 2px 5px rgba(0,0,0,.55), 0 18px 46px rgba(0,0,0,.5);
+    cursor: crosshair; touch-action: none; display: block;
+  }
+
+  #side {
+    width: 232px; flex: 0 0 232px; display: flex; flex-direction: column;
+    border-left: 1px solid #0d0b08; background: #1d1813;
+  }
+  header { padding: 11px 12px 9px; border-bottom: 1px solid #0d0b08; }
+  header h1 { margin: 0 0 3px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600; }
+  header p { margin: 0; color: var(--rule); font-size: 10px; }
+
+  #palette { flex: 1; overflow-y: auto; padding: 6px 8px 14px; }
+  .fam {
+    color: var(--rule); text-transform: uppercase; letter-spacing: .16em;
+    font-size: 9px; margin: 11px 0 4px 2px;
+  }
+  .fam:first-child { margin-top: 2px; }
+  .blk {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 6px;
+    width: 100%; padding: 4px 7px; margin-bottom: 2px; text-align: left;
+    background: transparent; color: var(--paper);
+    border: 1px solid transparent; border-radius: 2px;
+    font: inherit; cursor: pointer;
+  }
+  .blk:hover { background: #2a231b; border-color: #3a3125; }
+  .blk.on { background: var(--paper); color: var(--ink); border-color: var(--paper); }
+  .blk .sz { color: var(--rule); font-size: 9px; }
+  .blk.on .sz { color: #6f6349; }
+
+  footer { border-top: 1px solid #0d0b08; padding: 8px 12px 11px; }
+  .row { display: flex; gap: 6px; margin-bottom: 7px; }
+  button.act, select {
+    flex: 1; padding: 4px 6px; font: inherit;
+    background: #2a231b; color: var(--paper);
+    border: 1px solid #3a3125; border-radius: 2px; cursor: pointer;
+  }
+  button.act:hover, select:hover { background: #342b21; }
+  #rot { color: var(--hot); }
+  #hud { color: var(--rule); font-size: 9.5px; line-height: 1.5; word-break: break-word; }
+  kbd {
+    background: #2a231b; border: 1px solid #3a3125; border-bottom-width: 2px;
+    border-radius: 2px; padding: 0 3px; font: inherit; color: var(--paper);
+  }
+  .keys { color: var(--rule); font-size: 9.5px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage"><canvas id="plate"></canvas></div>
+
+  <aside id="side">
+    <header>
+      <h1>Carceri</h1>
+      <p>Build in stone; the plate is bitten when you stop moving.</p>
+    </header>
+
+    <div id="palette"></div>
+
+    <footer>
+      <div class="keys">
+        <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk ·
+        <kbd>Q</kbd><kbd>E</kbd> height ·
+        <kbd>R</kbd> turn the block<br>
+        drag sideways to turn · drag up/down to raise the view ·
+        click to build · right-click to take back
+      </div>
+      <div class="row">
+        <span id="rot">turn 0°</span>
+      </div>
+      <div class="row">
+        <button class="act" id="new">empty ground</button>
+        <select id="scene"><option value="">load a plate…</option></select>
+      </div>
+      <div id="hud"></div>
+    </footer>
+  </aside>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
