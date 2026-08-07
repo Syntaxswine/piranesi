@@ -42,5 +42,12 @@ jobs:
       # blocks exist, which meet nothing, which grew a sealed chamber.  Its own
       # self-checks run first and it refuses to write if one fails.
       - run: node tools/census.mjs --check
+      # THE HUNDRED, and the two properties no per-block filter can guarantee:
+      # the kit must be ONE joinery component, and every block must have
+      # something in the kit it can be set down on.
+      - run: node tools/kit.mjs --check
+      # And the terminal test: can the hundred actually TILE a building with
+      # every seam exact?  A kit that cannot is a shelf of strangers.
+      - run: node tools/assemble.mjs --w 5 --d 5 --h 3 --size 400x300 --out /tmp/asm.png
       # layershot is the one that would notice the layer feedback going flat.
       - run: node tools/layershot.mjs --layers 3 --layer 1 --size 320x220 --out /tmp/layers.png

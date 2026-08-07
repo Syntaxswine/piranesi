@@ -1,0 +1,394 @@
+{
+  "headline": "Choose each block for what it lets the NEXT layer do — the ceiling that carries it, the edge word it hands sideways, and the base plan it can be set down on — because the cube law already made joinery near-universal (10,806 of 10,826 fully flush) so \"does it join\" ranks nothing, while vertical continuation, edge-word bridging and a solid cap are scarce, and the composite score is blind to all three.",
+  "roles": [
+    {
+      "name": "through-storey",
+      "count": 10,
+      "why": "MERGES architecture's through-storey with ergonomics' plate — the same 16 blocks under two names. base==1 AND cap==1 exists in only 16 of 10,826 and 2 of those hide a sealed chamber, so the true pool is 14 and this role takes ten of them. COUNT RESOLVED to architecture's 10 over ergonomics' 8: this is a layer-by-layer builder, the middle storey is the free variable, and ten of fourteen buys ten different rooms inside one interchangeable envelope (hall, colonnade, rotunda, crossing, courtyard, apse). Nothing else in the grammar lets the player change the room without changing the floor above it. Measured: raising this from 8 to 10 is what took the kit from 8 to 10 blocks at both==1.0 and lifted base>=0.9 from 21 to 26.",
+      "filter": {
+        "baseMin": 1,
+        "capMin": 1,
+        "chambersMax": 0
+      },
+      "examples": [
+        "S:full,twin,full:stone",
+        "S:full,drum,full:stone",
+        "S:full,cross,full:stone"
+      ]
+    },
+    {
+      "name": "gate",
+      "count": 10,
+      "why": "MERGES four names for one idea: architecture's lintel-opening, carceri's pierced-wall, ergonomics' corridor, joinery's gate. FILTER RESOLVED to architecture's cap==1 — strictly sharper than joinery's topPlanIn:[full,frame,shaft,notch] proxy and than the others' cap>=0.8, and it is the load-bearing property: the top storey IS the lintel, so the opening carries a completely solid ceiling and the next layer lands anywhere over it. Only 89 blocks in the grammar do this. Every other opening either has no roof (you are walking over it, not through it) or has a broken cap that strands the storey above. Ten slots because openings are where a builder spends.",
+      "filter": {
+        "capMin": 1,
+        "chambersMax": 0,
+        "family": "stack",
+        "horizontalPassage": true,
+        "supportMin": 0.6
+      },
+      "examples": [
+        "S:drum,notch,full:stone",
+        "S:twin,shaft,full:stone",
+        "S:shaft,twin,full:stone"
+      ]
+    },
+    {
+      "name": "solid-mass",
+      "count": 8,
+      "why": "The ashlar, and the owner asked for it by name. The solid 81/81 elevation is the commonest wall pattern in the grammar by a distance (976 blocks) and a run of these is what makes ten placements read as one quarry-cut mass rather than a row of boxes. COUNT RESOLVED at 8, splitting architecture's 7 against the 10 of carceri/ergonomics/joinery: mass>=0.95 with no way through is only 31 blocks differing by a single 3x2.5 bite, so the extra two would be invisible at ten yards — but 7 under-buys the thing that gets placed a thousand times. No score reaches for these (S:full,full,full scores 0.565 for having zero ways through), so the slots must be reserved and that block PINNED by name.",
+      "filter": {
+        "family": "stack",
+        "waysMax": 0,
+        "massMin": 0.85,
+        "reachMin": 400,
+        "supportMin": 0.8,
+        "excludePlans": [
+          "rounded"
+        ],
+        "chambersMax": 0
+      },
+      "examples": [
+        "S:full,full,full:stone",
+        "S:notch,full,notch:stone",
+        "S:full,full,frame:stone"
+      ]
+    },
+    {
+      "name": "ell-bridge",
+      "count": 7,
+      "why": "Half of the ONE path from the solid family of blocks to the open family. ell emits the solid edge word on two sides and 111110000 on the other two; nothing else carries the solid register to the five-wide register at a single storey. COUNT RESOLVED at 7, between joinery's 10 and the 8 of architecture/ergonomics: joinery's ablation (delete this and corner-bridge and a 100-block kit breaks into 4 components) justifies a dedicated role but not 20 of 100 spent on angles. It is also the room-maker — an ell block and its own quarter-turn cancel exactly, so two make a room and four make a courtyard. corner is EXCLUDED here so the role cannot quietly fill with the other half of the pair.",
+      "filter": {
+        "chambersMax": 0,
+        "family": "stack",
+        "usesPlans": [
+          "ell"
+        ],
+        "excludePlans": [
+          "corner",
+          "rounded",
+          "bar-wide",
+          "ell-deep"
+        ],
+        "reachMin": 150
+      },
+      "examples": [
+        "S:notch,drum,ell/2:stone",
+        "S:tee,frame,ell/3:stone",
+        "S:ell,shaft,ell:stone"
+      ]
+    },
+    {
+      "name": "corner-bridge",
+      "count": 7,
+      "why": "The other half of that single path, and kept a SEPARATE role rather than merged with ell-bridge under one usesPlans:[ell,corner] — a merged role would be filled entirely with ells by the greedy and the ablation would still bite. corner is the only plan besides ell emitting 111110000, and unlike ell it also emits the fully-open word, so ell reaches half-way and corner completes the crossing. It is also the only quarter-block: four meeting at an arris grow one whole pier between them. Matched to the ells so every ell wall has a corner to hand off to. Absorbs ergonomics' corner-turn, the move with no measured column — a void entering one face and leaving an ADJACENT face scores ways 0 and is invisible to the score.",
+      "filter": {
+        "chambersMax": 0,
+        "family": "stack",
+        "usesPlans": [
+          "corner"
+        ],
+        "excludePlans": [
+          "ell",
+          "rounded",
+          "bar-wide",
+          "ell-deep"
+        ],
+        "reachMin": 150
+      },
+      "examples": [
+        "S:notch,corner/1,notch:stone",
+        "S:corner,twin,notch/3:stone",
+        "S:corner,frame,corner:stone"
+      ]
+    },
+    {
+      "name": "open-register",
+      "count": 7,
+      "why": "ADDED IN RECONCILIATION, and the fix for a measured hole: a first build of this merged kit contained bar in 2 blocks, tee in 0 and cross in 0. bar and tee are the only plans emitting BOTH the fully-open word 000000000 and the single-pier word 000111000, so they stitch the see-through storey to the centred-pier storey; without them the open register is an island the player can reach and never leave. cross is folded in here rather than given carceri's own groin-crossing role because a 16-role budget cannot afford both and the three plans are one register — the storey you can see through, where a Carceri actually lives, and the junction where a vault along x hands over to a vault along y.",
+      "filter": {
+        "family": "stack",
+        "usesPlans": [
+          "bar",
+          "tee",
+          "cross"
+        ],
+        "excludePlans": [
+          "rounded"
+        ],
+        "waysMin": 1,
+        "reachMin": 150,
+        "chambersMax": 0
+      },
+      "examples": [
+        "S:tee,frame,ell/3:stone",
+        "S:bar,shaft,ell/2:stone",
+        "S:cross,frame,ell/1:stone"
+      ]
+    },
+    {
+      "name": "hub-joiner",
+      "count": 6,
+      "why": "MERGES ergonomics' universal-joiner with joinery's hub argument. Only 202 blocks of 10,826 reach 600+ of a possible 975; these meet about 62% of the vocabulary on a given wall, and the reason is joinery's: full, frame and shaft are the only three plans emitting the solid edge word on all four sides. This is the get-out-of-jail piece for a player who left an awkward face three layers down. waysMin 1 keeps it distinct from solid-mass — a joiner you can also see through — which is what stops these six being a second helping of the ashlar. Note it is not six lumps: frame is a ring round a court and shaft is bored, so they read as solid masonry from outside while carrying light wells inside.",
+      "filter": {
+        "reachMin": 600,
+        "waysMin": 1,
+        "massMin": 0.55,
+        "chambersMax": 0,
+        "excludePlans": [
+          "rounded"
+        ]
+      },
+      "examples": [
+        "S:shaft,frame,shaft:stone",
+        "S:frame,twin,shaft:stone",
+        "S:notch,notch,notch:stone"
+      ]
+    },
+    {
+      "name": "shaft-well",
+      "count": 6,
+      "why": "MERGES architecture's light-well, carceri's well-shaft and ergonomics' shaft-well, but takes JOINERY'S filter, which is sharper than all three: pin basePlanIn and topPlanIn to the SAME set {shaft, frame, bore, drum, quarters, cross}. Deck joinery is total and plan-keyed — B stands on A if and only if basePlan(B) === topPlan(A), with no partial matches — so a shaft only continues upward if both ends are drawn from one set. That turns six blocks into a shaft of unbounded height instead of six one-storey wells, and it is what closed bore, quarters and cross as top plans in the kit (measured: vertical orphans fell from 32 to 14). A shaft is also the only void the grammar exempts from needing a roof.",
+      "filter": {
+        "basePlanIn": [
+          "shaft",
+          "frame",
+          "bore",
+          "drum",
+          "quarters",
+          "cross"
+        ],
+        "topPlanIn": [
+          "shaft",
+          "frame",
+          "bore",
+          "drum",
+          "quarters",
+          "cross"
+        ],
+        "verticalShaft": true,
+        "chambersMax": 0,
+        "excludePlans": [
+          "rounded",
+          "ell-deep",
+          "bar-wide"
+        ]
+      },
+      "examples": [
+        "S:shaft,frame,shaft:stone",
+        "S:quarters,frame,shaft:stone",
+        "S:frame,shaft,bore:stone"
+      ]
+    },
+    {
+      "name": "crossing",
+      "count": 5,
+      "why": "Where two covered ways meet — the hall you can leave in four directions, the place a building stops being a corridor. Roofed passage on both horizontal axes, cap>=0.9 so it still carries, support>=0.5 so it is not a levitation trick. COUNT RESOLVED DOWN from the 8 that architecture, carceri and ergonomics each wanted: with 378 candidates this is where the grammar's best-scoring blocks already live, so the greedy reaches it anyway and the slots are better spent on open-register, which the score never reaches at all. Filled LAST of the horizontal roles because its pool is the largest and it should take what the tighter roles left.",
+      "filter": {
+        "capMin": 0.9,
+        "chambersMax": 0,
+        "family": "stack",
+        "horizontalPassage": true,
+        "supportMin": 0.5,
+        "waysMin": 2,
+        "excludePlans": [
+          "rounded"
+        ]
+      },
+      "examples": [
+        "S:corner,ell/1,notch/3:stone",
+        "S:corner,twin,notch/3:stone",
+        "S:tee,frame,ell/1:stone"
+      ]
+    },
+    {
+      "name": "stair-well",
+      "count": 5,
+      "why": "The hole a staircase goes through, and the only way one storey ever reaches another. Vertical shaft AND a roofed horizontal way, so you can walk into the shaft on the level rather than only fall down it — that pairing is what separates a stairwell from a chimney, and only 64 blocks have both while keeping cap>=0.8 and support>=0.7. This is the Carceri's whole subject and it is the role most easily lost to a score-based pick, because breaking the floor costs base, cap and mass at once. Kept honest: the grammar has NO stair plan, so this is the hole, not the stair.",
+      "filter": {
+        "capMin": 0.8,
+        "family": "stack",
+        "horizontalPassage": true,
+        "supportMin": 0.7,
+        "verticalShaft": true,
+        "chambersMax": 0,
+        "excludePlans": [
+          "rounded"
+        ]
+      },
+      "examples": [
+        "S:notch,twin/1,ell/3:stone",
+        "S:ell,twin,notch/1:stone",
+        "S:ell,twin/1,notch/2:stone"
+      ]
+    },
+    {
+      "name": "vault-dock",
+      "count": 5,
+      "why": "MERGES joinery's vault-load and vault-springer into one piece that does both jobs, which is what freed the role slot for open-register. A full arch's ceiling is exactly twin's footprint — the two spandrel bands the whole-block circle leaves — so a stack with base plan twin is the ONLY thing in the grammar that can carry a storey over a vault. Topping it with bar, tee or drum makes the same block a springer for the NEXT arch, since an arch's underside is its pier plan's footprint. twin is included in topPlanIn so the register closes on itself: without it the 17 twin-based blocks are vertical orphans that can stand on an arch and on nothing else. Without this role the barrel vault is the top of the building forever.",
+      "filter": {
+        "basePlanIn": [
+          "twin"
+        ],
+        "topPlanIn": [
+          "bar",
+          "tee",
+          "drum",
+          "twin"
+        ],
+        "chambersMax": 0,
+        "excludePlans": [
+          "rounded"
+        ]
+      },
+      "examples": [
+        "S:twin,shaft,bar:stone",
+        "S:twin,ell/1,twin:stone",
+        "S:twin,corner,tee/1:stone"
+      ]
+    },
+    {
+      "name": "barrel-vault",
+      "count": 5,
+      "why": "THE HARDEST CONTRADICTION, and the count is a grammar fact rather than a preference. All four lenses asked for 6-8; the grammar permits FIVE. cap is exactly 0.667 for all 24 full arches and 0.333 for all 34 halves, so capMin 0.5 is an exact cut; reachMin 90 is a measured cliff — six full arches reach 90+ and the seventh reaches 14.5, and joinery measured why: an arch whose pier presents the solid word on the cross axis has flanks met by 20 blocks of which ZERO are stacks, so it can touch no masonry on any face. Of those six, A:x+:corner/1 and A:x+:corner/2 share one turn-blind sequence (A:x<hand>:<pier>), so the chiral pair ergonomics wanted cannot be spent here: 6 recipes, 5 sequences, 5 slots. R_WHOLE == SUB/2 means they spring and crown on the boundary planes, so a row cancels its shared caps and reads as one continuous barrel with no membranes between bays.",
+      "filter": {
+        "family": "arch",
+        "capMin": 0.5,
+        "reachMin": 90
+      },
+      "examples": [
+        "A:x+:drum:stone",
+        "A:x+:bar:stone",
+        "A:x+:tee/2:stone"
+      ]
+    },
+    {
+      "name": "court",
+      "count": 5,
+      "why": "frame is the block minus a court in the middle — a room, a light well, an enclosed yard open to the sky, and the only plan that gives a room its own courtyard. basePlanIn frame puts the enclosure on the GROUND storey, which is the whole point: four of them make a real court you stand in rather than a hole in a ceiling. Kept separate from shaft-well because the reading is completely different at icon scale — a square ring, not a bored cylinder — and because a ring of them two layers high is the fastest way for a player to make an interior feel vast. It is also the piece that gives a shaft its parapet.",
+      "filter": {
+        "basePlanIn": [
+          "frame"
+        ],
+        "chambersMax": 0,
+        "excludePlans": [
+          "rounded"
+        ],
+        "reachMin": 150
+      },
+      "examples": [
+        "S:frame,twin,shaft:stone",
+        "S:frame,frame,frame:stone",
+        "S:frame,quarters,shaft:stone"
+      ]
+    },
+    {
+      "name": "free-pier",
+      "count": 5,
+      "why": "THE SCARCEST STRUCTURAL ROLE IN THE GRAMMAR — exactly 20 blocks in 10,826, and every one a distinct sequence. FILTER RESOLVED to architecture's, against the looser massMax-only versions of carceri and ergonomics, on measured evidence: a first build of this kit using massMax 0.45 with a plan list returned ZERO blocks satisfying mass<=0.4 AND support>=0.85, and the colonnade build test failed outright. A pier is thin, stands on itself all the way up, and has NO roofed horizontal way — because a freestanding pier has no roof; the passage past it is open sky, which is why waysMin is the wrong test and horizontalPassage:false is the right one. Without these the kit can only ever perforate walls; with them it can build a hall whose ceiling floats on points.",
+      "filter": {
+        "family": "stack",
+        "horizontalPassage": false,
+        "massMax": 0.4,
+        "supportMin": 0.85
+      },
+      "examples": [
+        "S:corner,corner,corner:stone",
+        "S:cross,drum,drum:stone",
+        "S:tee,bar,bar:stone"
+      ]
+    },
+    {
+      "name": "corbel",
+      "count": 5,
+      "why": "MERGES ergonomics' corbel with carceri's cantilever-gallery: a heavy mass oversailing a thin waist, the move that makes a building look impossible on purpose rather than by accident. There is no supportMax in the filter grammar, so the overhang is bought through PLAN ORDER instead — pin a near-solid plan at the FLOOR and at the ROOF and force drum, corner, bore or quarters into the only place left, the middle. That is literally the census's number-one block, S:notch,drum,notch at 44% support. This is also where the 3,472 low-support blocks become the player's deliberate impossibility rather than the generator's accident, which is why every other carrying role holds supportMin >= 0.5.",
+      "filter": {
+        "basePlanIn": [
+          "notch",
+          "full",
+          "ell-deep",
+          "shaft"
+        ],
+        "topPlanIn": [
+          "notch",
+          "full",
+          "ell-deep",
+          "shaft"
+        ],
+        "usesPlans": [
+          "drum",
+          "corner",
+          "bore",
+          "quarters"
+        ],
+        "reachMin": 150,
+        "chambersMax": 0
+      },
+      "examples": [
+        "S:notch,drum,notch:stone",
+        "S:notch,corner/1,notch:stone",
+        "S:full,quarters,shaft:stone"
+      ]
+    },
+    {
+      "name": "anchor-bay",
+      "count": 4,
+      "why": "The secondary tier is where the Carceri actually lives — chains, rings, torches, pulleys, rusty iron things — and an anchor site needs stone immediately behind it, so 2,620 blocks (24%) cannot take one at all. anchorsMin 3 buys the maximum the generator ever grants and waysMax 1 keeps it a quiet bay to hang something IN rather than a crossing to walk THROUGH, which is what stops it collapsing into the crossing pool. COUNT RESOLVED DOWN to 4 from the 5-7 the lenses wanted because it is the most redundant role in the merged set: measured, the finished kit carries 198 anchor sites and 44 blocks with anchors>=2 beside a roofed passage without this role doing much of the work. Skip it entirely, though, and the player builds a masonry model with nothing hanging in it.",
+      "filter": {
+        "anchorsMin": 3,
+        "capMin": 0.9,
+        "chambersMax": 0,
+        "family": "stack",
+        "supportMin": 0.7,
+        "waysMax": 1
+      },
+      "examples": [
+        "S:notch,ell/2,notch/3:stone",
+        "S:ell-deep,ell,notch/1:stone",
+        "S:ell,ell,notch/1:stone"
+      ]
+    }
+  ],
+  "rejects": [
+    "ALL 34 HALF-ARCHES — CONTRADICTION RESOLVED AGAINST architecture (3) and ergonomics (2), with carceri and joinery. Measured here: every full arch has deck 370-680 and every half-arch has deck exactly 0, to a block. The tiebreak is the game's loop, not the picture — this is a LAYER-BY-LAYER builder, so a piece nothing can stand on caps that column of the model permanently, and the player discovers it three layers later. capMin 0.5 cuts them exactly (cap is 0.667 for all 24 full arches, 0.333 for all 34 halves). ENFORCE ON EVERY SLOT, NOT JUST THE ARCH ROLE: a test build leaked A:xl:bar back in through the unfiltered top-up pass.",
+    "ANY BLOCK USING THE rounded PLAN — CONTRADICTION RESOLVED AGAINST architecture's 4 round-mass slots, with the other three lenses. Joinery gives the measurable reason: rounded is the only plan emitting the edge word 011111110 and it emits nothing else on any of its four sides, so a rounded storey's walls can only ever be met by another rounded storey. The census gives the endpoint: S:rounded,rounded,rounded is the one block in 10,826 that meets nothing at all, and even S:full,rounded,full reaches 77 against a mean of 337 for the straight-banded plans. A round tower that cannot die into a straight one is a missing PLAN — a band on one side, a slice-plane wall on the other — not a use for kit slots. The curved skyline architecture and ergonomics both wanted is bought instead through drum and bore tops, which join.",
+    "THE 88 SEALED-CHAMBER BLOCKS — unanimous across all four lenses and the cheapest reject in the list. A drum plugging a bored shaft under a solid cap makes a void with no way out: unreachable, unlightable, unbuildable-in, invisible from outside so the player cannot even be surprised by it, and it costs exactly as much stone as a room. chambersMax 0 sits on every role whose pool can contain one — note that base==1 AND cap==1 is 16 blocks but only 14 without a chamber, so even the rarest role in the kit needs the guard.",
+    "FULL ARCHES WHOSE FLANKS NO STACK CAN MEET (reach < 90) — CONTRADICTION RESOLVED AGAINST carceri's vault-off-solid role, which spent 6 slots on arches reaching 8-15. Joinery measured it decisively: an arch whose pier presents the SOLID word on the cross axis (full, frame, shaft, twin, notch) has flanks met by 20 blocks of which ZERO are stacks — it cannot touch masonry on any face, so it is not a seam-maker, it is a floating object. The consequence must be stated plainly rather than papered over: THE KIT HOLDS FIVE VAULTS, and five is a grammar fact, not a design choice. Reach for the six full arches at 90+ is drum 189.5, bar 188.5, bar-wide 187, tee/2 97, corner/1 96.25, corner/2 96.25; the seventh is 14.5.",
+    "MORE THAN ONE BLOCK PER TURN-BLIND PLAN SEQUENCE. Rotation is free on the rotate key and the census proved 73% of any every-combination catalogue is the same block relabelled; S:corner,ell/1,notch/3 and S:corner,ell/3,notch are one piece to the player and two slots to the kit. THE MEASURED TRAP: the sequence key for an arch is A:<axis><hand>:<pier>, so A:x+:corner/1 and A:x+:corner/2 collapse to ONE sequence — the chiral-pair exception ergonomics wanted cannot be spent on arches, which is exactly why 6 qualifying arch recipes yield only 5 slots.",
+    "SELECTION BY THE COMPOSITE SCORE AT ALL. Measured on the same 100-block budget: top-100-by-score is 100 blocks in only 45 distinct shapes, 6 distinct top plans, ZERO arches, ZERO solids, nothing below 44% mass, never once uses bar or rounded, presents 99 wall patterns of which 39 belong to exactly one block, leaves 31 of its 400 walls with no partner in the kit, and strands 33 blocks that cannot stand on anything else it contains. Use the score to rank WITHIN a role; never to choose the roles.",
+    "PLAN MONOCULTURE, and specifically notch. Unguarded, score-ordered picking puts notch in 70+ of 100 (mass 0.91, base 0.926, near-solid walls buy reach, support and anchor sites — none of which the player can SEE, so the score's favourites are its least legible blocks) and never once uses cross, bore or quarters. No plan may hold more than about a third of the kit. cross, bore and quarters each get reached only because a named role forces it.",
+    "bar-wide AND ell-deep AS ROLES OF THEIR OWN. bar-wide's distinctive word 001111100 bridges only to the fully-open word, which bar and tee already reach while ALSO reaching the centre-third word — it is a strictly worse bar, same bridge with one extra orphan word bought alongside. ell-deep's 111111000 leads only back to ell-deep, while ell's 111110000 is also emitted by corner, which is what makes ell's bridge lead somewhere. Both are excluded from the bridge roles and admitted only where another role happens to pick them up.",
+    "REACH BELOW ~150 IN ANY STRUCTURAL ROLE. Joinery is near-universal (10,806 of 10,826 have all four walls met), so 'does it join' cannot rank anything — but reach runs 0 to 975, and a reach-15 block is one whose walls only 15 others speak. It will not cancel its faces against its neighbours and reads as a separate box sitting in the room. Every load-bearing role carries reachMin 150-600. The only knowing exceptions are free-pier and through-storey, where the pool is 20 and 14 blocks respectively and there is nothing to choose from.",
+    "THE LOW-SUPPORT FLOAT AS BULK. 3,472 blocks (32%) carry less than half their own upper storeys where one slice hands over to the next. A few make the Carceri; a kit made of them reads as a rendering error rather than a building. Every carrying role holds supportMin >= 0.5 and most >= 0.7, and the impossibility is confined to ONE role — corbel — where it is bought deliberately through plan order, since the filter grammar has no supportMax.",
+    "MORE THAN ABOUT 8 NEAR-SOLIDS, AND WISPS BELOW 0.25 MASS. mass >= 0.95 with no way through is 31 blocks differing by a single 3x2.5 bite; the solid block gets placed a thousand times, its cousins do not, and beyond eight the slots are stolen from the openings. At the other end, below about a quarter mass it is not masonry, it is wire, and at icon scale one piece of lace is indistinguishable from another — the 4,564 blocks with all three ways open are not 4,564 useful pieces."
+  ],
+  "buildTests": [
+    "NO DEAD AIR: no block in the kit has chambers > 0. Checkable directly against the 88 sealed-chamber blocks in the grammar. VERIFIED 0/100 on the merged spec.",
+    "NO DECK-0 BLOCK ANYWHERE, INCLUDING VIA TOP-UP: every block in the kit has deck > 0, so a four-storey tower can change plan at every storey and still stack flush. Equivalently, no arch in the kit has cap below 0.55. VERIFIED 0 deck-0 blocks; a test build without this guard leaked A:xl:bar in through the unfiltered top-up pass.",
+    "THE SECOND STOREY: stack three blocks over one footprint. Every block below the top must present cap >= 0.9 and every block above base >= 0.9. Checkable: at least 25 blocks with cap >= 0.9, at least 25 with base >= 0.9, and at least 10 with BOTH at exactly 1.0 (only 16 such blocks exist in the whole grammar and only 14 are chamber-free). VERIFIED 31 / 26 / 10. Architecture's original threshold of 30/30 is not reachable alongside 6 shaft-wells and 5 stair-wells, which break the floor by construction; 25 is still well above the grammar's 17.6% base rate.",
+    "A CLOSED ROOM WITH A DOOR, then a second storey over it. Four corner returns at the corners, wall runs between, one gate as the doorway. Checkable: all nine have flush == 4, the door block has horizontalPassage == true AND cap == 1.0 so the storey above lands over the opening, and the room's ceiling is continuous.",
+    "A CORNER WITH NO SEAM: an ell-bridge block, then the SAME block turned one quarter, meeting it. ell/0's +x edge word is 111110000 and ell/1's -x edge word is the same, so a block and its own quarter-turn cancel. Verify the seam cancels 81 of 81 cells, not 80. Then substitute a corner-bridge block at two of the four corners — it must still cancel, because ell and corner are the only two plans that both emit 111110000.",
+    "A FIVE-BAY BARREL VAULT reading as one continuous tunnel with no membrane between bays, from ONE repeated arch. Requires a self-runnable arch (identical end profiles): A:x+:bar, A:x+:bar-wide, A:x+:drum and A:x+:tee/2 are, A:x+:corner/1 and A:x+:corner/2 are not. Checkable: at least two self-runnable arches in the kit.",
+    "THE VAULT DOCKED SIDEWAYS: the same five-bay barrel with masonry set against its flanks. Only arches with reach >= 90 have a flank pattern any stack can meet (374 partners, 363 of them stacks); the rest are met by 20 blocks of which zero are stacks. Checkable: every arch in the kit has reach >= 90 — this is the acceptance criterion that caps the kit at five vaults.",
+    "A VAULTED BAY THREE COURSES HIGH: a springer (top plan bar, tee or drum) -> the arch standing on it -> a vault-dock block standing on the arch. A full arch's top face is exactly twin's footprint, so ONLY a stack whose BASE plan is twin can carry a storey over a vault. All three seams must cancel. Checkable: at least 5 blocks with base plan twin, and at least 3 with a top plan of bar, tee or drum.",
+    "TWO BARREL VAULTS CROSSING AT RIGHT ANGLES with a groin block at the junction. Rotation is free at placement so one arch recipe supplies both axes; the junction needs a cross-plan block with at least two ways through. Checkable: at least one cross-plan block in the kit.",
+    "A GATE IN A CONTINUOUS WALL, THEN A TUNNEL OF FOUR: a run of solid-mass blocks along y with gate blocks set in it. Each gate's +/-y walls stay the all-solid pattern so the wall reads unbroken, while a ROOFED passage runs through on x. Four in a row makes 36 yards of passage with no membrane between bays and one mass above it. S:frame,twin,shaft is the shape.",
+    "A SIX-BLOCK WALL RUN WHOSE SEAMS DISAPPEAR ENTIRELY, and a blank buttressed wall 5 long by 3 high with no opening anywhere. Checkable: at least 6 blocks with reach >= 400; at least 6 with ways == 0 AND mass >= 0.82 AND reach >= 250; and S:full,full,full:stone present by name. VERIFIED 55 / 13 / pinned.",
+    "A COLONNADE, NOT A PERFORATED WALL: five free-pier blocks in a row carrying five lintel blocks. Checkable: at least 5 blocks with mass <= 0.4 AND support >= 0.85 — the grammar holds only 20, and a kit without them can build walls with holes in and nothing else. VERIFIED 6; a build using a looser mass-only filter scored 0 here and failed outright.",
+    "THE SHAFT NOBODY PLANNED: four quarters blocks meeting at one arris grow a single whole R2.5 column between them that none of them individually contains. Checkable: at least 4 quarters-plan blocks in the kit whose walls meet, placeable 2x2.",
+    "A COLONNADE WHOSE SEAMS VANISH AT THE GROUND STOREY: six blocks from the four-fold-symmetric void plans (cross, drum, quarters, bore) in a row, all presenting the fully-open edge word below, so the row reads as one arcade under one continuous entablature rather than six boxes.",
+    "A TOWER EIGHT BLOCKS HIGH WITH A SHAFT RUNNING ITS WHOLE LENGTH. Deck matching is total and plan-keyed: B stands on A iff basePlan(B) === topPlan(A), with no partial matches. Checkable: at least 6 blocks with through.z, base plan AND top plan both drawn from {shaft, frame, bore, drum, quarters, cross}, so any two stack in any order.",
+    "A WELL THREE STOREYS DEEP, twenty-seven yards of drop, open top and bottom. Checkable: at least 6 blocks with through.z true, through.x and through.y false, and deck > 0. VERIFIED 24. Separately, A LIT WELL THROUGH SOLID MASONRY: a run of solid-mass blocks with one shaft-well in the middle, base >= 0.6, so light drops through a hole in an otherwise unbroken floor.",
+    "A STAIR CONNECTING TWO STOREYS: a stair-well block in the lower layer and another directly above it, both with verticalShaft == true AND horizontalPassage == true so you can enter the shaft on the level as well as fall down it. Checkable: at least 5 blocks satisfying both, with walls meeting each other. VERIFIED 37.",
+    "A COURT ENCLOSED ON FOUR SIDES AND OPEN TO THE SKY, with a parapet you can stand behind. Requires frame on the BOTTOM storey. Checkable: at least 4 blocks whose first layer is frame. VERIFIED 16.",
+    "A GREAT CIRCULAR OPENING YOU CAN SEE THROUGH — the R4.5 bore, nine yards across, tangent to all four walls, the only plan expressing R_WHOLE horizontally. Checkable: at least 4 bore-plan blocks with two or more ways through. VERIFIED 9.",
+    "A GALLERY CORBELLED OUT OVER A VOID: a mass oversailing a waist thinner than itself, standing on nothing at its outer edge. Checkable: at least 4 blocks whose bottom and top plans are near-solid and whose middle storey is drum, corner, bore or quarters; equivalently support well under 0.5 while cap is over 0.8. VERIFIED 16.",
+    "A CHAIN HUNG ACROSS A ROOFED PASSAGE: two blocks with anchors >= 2 facing each other across a horizontal way. Checkable: at least 40 blocks with anchors >= 2 AND (through.x or through.y). VERIFIED 44 and 198 anchor sites total — a kit failing this cannot make the plates' hanging tackle at all.",
+    "ONE COMPONENT: build the graph on the 100 where two blocks are joined if any wall of one, in any of its four turns, exactly matches a wall of the other, plus vertical deck matches. It must be a single component of 100, with zero blocks meeting nothing else. VERIFIED 1 component, 0 orphans, 95/100 fully flush, mean 3.92 of 4. A kit of 100 all-isotropic blocks fragments into 22.",
+    "THE ABLATION: delete the ell-bridge and corner-bridge roles and rebuild the same graph. It must break into 4 components. ell is the only plan carrying the solid word to the five-wide word and corner the only one carrying the five-wide word to the open word — together they are the single path from the solid family of blocks to the open family, and a kit without both is two cliques that cannot meet.",
+    "NO DEAD WALLS: for each of the 100, for each of its 4 walls, at least one OTHER kit block must present the mirror pattern in some turn. Target <= 12 of 400 unanswered. VERIFIED 5 blocks short of 4/4. Separately, NO VERTICAL ORPHAN: the set of base plans used by the 100 should be a subset of the set of top plans used, so nothing in the kit can never be set down. VERIFIED 14 of 100 remaining, down from 32 before the shaft-well and vault-dock filters were pinned at both ends — this is a property of the SET, so it is an acceptance criterion and cannot be guaranteed by any per-block filter.",
+    "PLAN COVERAGE: a plan appearing nowhere means the kit cannot build anything that shape. Checkable: 15 of the 16 plans used, rounded being the sole deliberate absence. VERIFIED 15/16. Also: no plan in more than about a third of the kit.",
+    "DECLARED IMPOSSIBLE, AND THE KIT MUST NOT PRETEND OTHERWISE — A VAULT DYING INTO A WALL. Exactly 4 blocks in the grammar meet an arch's cap and all 4 are arches, so butting a vault against masonry leaves a visible membrane. No selection of 100 can pass this. The fix is a new SPRINGER PLAN — the vault cross-section on one face, a slice-plane wall on the other — not a kit slot. Until it exists, every vault in the game either runs forever or stops in mid-air.",
+    "DECLARED IMPOSSIBLE — A STAIRCASE, branching or otherwise, despite it being one of the plates' headline subjects. There is no stair plan among the sixteen. The nearest read is a run of heavy-base, small-offset-top blocks at alternating quarter-turns, and the kit is chosen knowing that is an approximation rather than the thing."
+  ]
+}

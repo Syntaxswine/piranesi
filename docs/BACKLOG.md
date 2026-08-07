@@ -29,6 +29,25 @@
 > anything built first will be built twice. The rest of the list — the drawing,
 > staffage, ornament — is unaffected and safe to work on.
 >
+> ### ✅ Updated 2026-08-07 (later) — a HUNDRED-BLOCK KIT is chosen
+>
+> `docs/KIT.md` + `docs/kit.txt`, from the role spec in `docs/kit-spec.json`
+> (data, so argue with it and re-run). Not the top 100 by score — that would be
+> one idea a hundred times. One joinery component · 0 vertical orphans · 0
+> sealed chambers · 5 barrel vaults · 15 of 16 plans · 199 anchor sites.
+>
+> **`tools/assemble.mjs` is the terminal test** and it passes: a 6×6×4 fill with
+> **210 seams of 210 exact and 608 faces cancelled**. Handoff §14.
+>
+> Two properties no per-block score can see, each now its own repair pass:
+> **the kit must be one component** (a first pick was 99/100 flush and was
+> secretly *two kits*), and **every block must have something it can stand on**
+> (17 of 100 had nothing — which is what stopped a third storey).
+>
+> **0f is now doubly confirmed and is the top of the list.** No selection of 100
+> can make a vault die into masonry, because no block presents a spandrel on one
+> face and a wall on the other. It is a new PLAN — a springer — not a kit slot.
+>
 > ### ✅ Updated 2026-08-07 — the grammar has now been WALKED
 >
 > `docs/CENSUS.md` enumerates every block the grammar admits, measures all of

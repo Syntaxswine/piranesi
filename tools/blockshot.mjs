@@ -29,7 +29,7 @@ import { dirname, resolve } from 'node:path';
 import { buildCatalog, add } from '../js/stack.js';
 import { SUB, BLOCK_YARDS, BLOCK_METRES } from '../js/cube.js';
 import { World } from '../js/world.js';
-import { Camera, DEG } from '../js/math.js';
+import { Camera, DEG, projectWith } from '../js/math.js';
 import { Engraver } from '../js/engrave.js';
 
 const argv = process.argv.slice(2);
@@ -92,21 +92,65 @@ const [W, H] = arg('--size', has('--one') || has('--run') ? '900x800' : '1500x11
 const cx = (b.lo[0] + b.hi[0]) / 2, cy = (b.lo[1] + b.hi[1]) / 2;
 const diag = Math.hypot(b.hi[0] - b.lo[0], b.hi[1] - b.lo[1]);
 const yaw = Number(arg('--yaw', '55')) * DEG;
-const dist = Number(arg('--dist', String(diag * 0.85 + 16)));
 
 // The BUILD camera: a three-quarter overhead, which is the only angle that
 // shows you a block's plan and its elevation at once.  Pitched, therefore not
 // the explore camera; see math.js.
 const pitch = Number(arg('--pitch', '34')) * DEG;
-const cam = new Camera({
-  eye: [
-    cx - Math.cos(yaw) * dist * Math.cos(pitch),
-    cy - Math.sin(yaw) * dist * Math.cos(pitch),
-    b.lo[2] + dist * Math.sin(pitch) + Number(arg('--eyez', '2')),
-  ],
-  yaw, pitch, shift: H * Number(arg('--shift', '0')),
-});
-cam.setFraming({ width: W, height: H, hfovDeg: Number(arg('--fov', '52')) });
+const FOV = Number(arg('--fov', '52'));
+const SHIFT = Number(arg('--shift', '0'));
+const EYEZ = Number(arg('--eyez', '2'));
+
+const camAt = (d) => {
+  const c = new Camera({
+    eye: [
+      cx - Math.cos(yaw) * d * Math.cos(pitch),
+      cy - Math.sin(yaw) * d * Math.cos(pitch),
+      b.lo[2] + d * Math.sin(pitch) + EYEZ,
+    ],
+    yaw, pitch, shift: H * SHIFT,
+  });
+  c.setFraming({ width: W, height: H, hfovDeg: FOV });
+  return c;
+};
+
+/**
+ * FIT THE SHEET TO THE FRAME instead of guessing at `--dist`.
+ *
+ * The old default was `diagonal * 0.85 + 16`, which is a rule of thumb that
+ * holds for four blocks and fails for a hundred: a 10x10 sheet came back with
+ * two rows cut off the bottom, and the obvious correction — stand further back
+ * — overshot and rendered the kit as a postage stamp in the middle of an empty
+ * plate. Three manual attempts and still cropped.
+ *
+ * So: project the eight corners of the bounding box and bisect on the distance
+ * until they all sit inside the frame with a margin. The camera already knows
+ * how to project; there is no reason to be estimating this by hand.
+ */
+function fitDistance(margin = 0.045) {
+  const corners = [];
+  for (const x of [b.lo[0], b.hi[0]]) for (const y of [b.lo[1], b.hi[1]]) for (const z of [b.lo[2], b.hi[2]]) corners.push([x, y, z]);
+  const fits = (d) => {
+    const c = camAt(d).snapshot();
+    for (const [x, y, z] of corners) {
+      const [px, py, iz] = projectWith(c, x, y, z);
+      if (iz < 0) return false;                              // behind the eye
+      if (px < W * margin || px > W * (1 - margin)) return false;
+      if (py < H * margin || py > H * (1 - margin)) return false;
+    }
+    return true;
+  };
+  let lo = 1, hi = Math.max(64, diag * 4);
+  if (!fits(hi)) return hi;                                  // cannot fit; take the widest
+  for (let i = 0; i < 40; i++) {                             // bisect to the nearest cell
+    const mid = (lo + hi) / 2;
+    if (fits(mid)) hi = mid; else lo = mid;
+  }
+  return hi;
+}
+
+const dist = argv.includes('--dist') ? Number(arg('--dist', '0')) : fitDistance();
+const cam = camAt(dist);
 
 const eng = new Engraver({ width: W, height: H, ss: Number(arg('--ss', '2')) });
 const r = eng.render(world, cam, cat, { skin: arg('--skin', 'stone') });

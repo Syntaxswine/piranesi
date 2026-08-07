@@ -104,6 +104,41 @@ not a measurement.** The census now runs five self-checks each time — includin
 Burnside's lemma as an independent derivation of the orbit count — and refuses
 to write if one fails.
 
+## The hundred
+
+```bash
+node tools/kit.mjs                                   # docs/KIT.md + docs/kit.txt
+node tools/blockshot.mjs --recipes @docs/kit.txt --cols 10
+node tools/assemble.mjs --w 6 --d 6 --h 4            # build something out of them
+```
+
+[`docs/KIT.md`](docs/KIT.md) is a **hundred-block kit** chosen from the 10,826 —
+and deliberately *not* the top hundred by score, because high scores cluster and
+the top hundred is one idea a hundred times. It is picked from a role spec in
+[`docs/kit-spec.json`](docs/kit-spec.json) so the shape of the kit is data you
+can argue with, and then repaired for two properties **no per-block score can
+see**:
+
+- **It must be one thing.** Blocks are nodes, an edge is "these two can be set
+  side by side flush". A first pick came back 99 of 100 blocks flush on all four
+  walls — and it was *two kits*: an 87-block body and a 13-block island of
+  arches. No single block in the entire grammar touches both (403 touch the
+  island, 1,287 touch the body, intersection empty), so the fix is a two-block
+  chain found by breadth-first search over the grammar graph.
+- **Every block must be something you can set down.** Deck joinery is far
+  stricter than wall joinery — B stands on A only if B's whole floor equals A's
+  whole ceiling. A hundred chosen for their walls left **17 with nothing in the
+  kit to stand on**, which is what stops a building having a third storey.
+
+Both are facts about the *other ninety-nine*, so both get their own pass.
+
+**The terminal test is `tools/assemble.mjs`**, which is a small constraint
+solver rather than a renderer trick: it fills a region with kit blocks where a
+block may go in a cell only if the wall it shows each already-placed neighbour
+is *identical* to the wall shown back. On a 6×6×4 it reports **210 seams of 210
+exact and 608 faces cancelled** — the seams do not get hidden, they stop
+existing.
+
 ```bash
 node tools/layershot.mjs --layers 3 --layer 1
 ```
