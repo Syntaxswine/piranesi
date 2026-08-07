@@ -138,3 +138,77 @@ export function wordsByPlan(planMask, planIds, plans, sub = 9) {
   }
   return table;
 }
+
+/* ================================================== THE OWNER'S NOTATION == */
+
+/**
+ * A BLOCK'S INTERFACE IN ONE LINE, and it turns out to be a query language.
+ *
+ * The owner: "the count starts at the 12 o clock position, the letter would be
+ * the opening type, and the number is the floor that opening is on. so in this
+ * case its a T intersection with the south and west entrances on the first
+ * floor, and the east entrance on the second floor."
+ *
+ * The rule that makes it work is his: *for walkable space you are likely only
+ * going to have one opening per level.* Two on one side at different levels is
+ * legal and joined by stairs, but it is the exception. Measured against the
+ * grammar: 2,371 of the 10,826 blocks have at most one opening a side, and
+ * those are the ones this describes.
+ *
+ * Sides run clockwise from twelve o'clock — N, E, S, W — which on a plan seen
+ * from above is +y, +x, -y, -x. Floors are 1, 2, 3 from the ground.
+ *
+ * THE LETTERS ARE PROVISIONAL. They are assigned here in a stated order so the
+ * machinery works; the owner has his own catalogue of eighteen and it is his to
+ * name. Only `TYPES` below needs changing.
+ */
+export const TYPES = [
+  { bits: '111111111', letter: '-', gloss: 'solid; no way through' },
+  { bits: '111000111', letter: 'B', gloss: 'a 3 yd door, centred' },
+  { bits: '111111000', letter: 'C', gloss: 'a 3 yd door against the far jamb' },
+  { bits: '000111111', letter: 'c', gloss: 'the same, handed' },
+  { bits: '111110000', letter: 'D', gloss: 'a 4 yd opening at one end' },
+  { bits: '000011111', letter: 'd', gloss: 'the same, handed' },
+  { bits: '110000011', letter: 'E', gloss: 'a 5 yd opening, centred' },
+  { bits: '000000000', letter: 'O', gloss: 'wholly open, the full 9 yd' },
+];
+const LETTER = new Map(TYPES.map((t) => [t.bits, t.letter]));
+
+/** N, E, S, W — clockwise from twelve, on a plan seen from above. */
+export const COMPASS = [['N', '+y'], ['E', '+x'], ['S', '-y'], ['W', '-x']];
+
+/**
+ * One side's entrance: which floor it is on and what type, or null for solid.
+ * Returns `{ floor, letter }`, or `{ exception: n }` when a side carries more
+ * than one — legal, joined by stairs, and deliberately marked as unusual.
+ */
+export function entranceOf(wallKey) {
+  const words = wordsOfWall(wallKey);
+  const found = [];
+  words.forEach((w, i) => { if (w.includes('0')) found.push({ floor: i + 1, bits: w }); });
+  if (!found.length) return null;
+  if (found.length > 1) return { exception: found.length, floors: found.map((f) => f.floor) };
+  return { floor: found[0].floor, letter: LETTER.get(found[0].bits) || '?', bits: found[0].bits };
+}
+
+/** The whole block: four sides clockwise from twelve. `B1, C2, D1, O1`. */
+export function signature(profileFor) {
+  return COMPASS.map(([, side]) => {
+    const e = entranceOf(profileFor(side));
+    if (!e) return '-';
+    if (e.exception) return `*${e.floors.join('')}`;
+    return `${e.letter}${e.floor}`;
+  }).join(', ');
+}
+
+/** How many sides can be walked into — the junction class, in his terms. */
+export function junctionOf(profileFor) {
+  const open = COMPASS.filter(([, side]) => entranceOf(profileFor(side)));
+  const k = open.length;
+  if (k === 0) return 'sealed';
+  if (k === 1) return 'dead-end';
+  if (k === 3) return 'T';
+  if (k === 4) return '+';
+  const [a, b] = open.map(([n]) => n);
+  return (a === 'N' && b === 'S') || (a === 'E' && b === 'W') ? 'I' : 'L';
+}
