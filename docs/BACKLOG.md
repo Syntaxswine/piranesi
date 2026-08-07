@@ -29,7 +29,50 @@
 > anything built first will be built twice. The rest of the list — the drawing,
 > staffage, ornament — is unaffected and safe to work on.
 >
-> **0e is now the top of the list, and it got sharper:**
+> ### ✅ Updated 2026-08-07 — the grammar has now been WALKED
+>
+> `docs/CENSUS.md` enumerates every block the grammar admits, measures all of
+> them and ranks them: **79,016 recipes → 39,508 distinct solids → 10,826
+> distinct blocks** once rotation is taken as free at placement. Three quarters
+> of any "every combination" catalogue is the same block relabelled.
+>
+> **0e below is CLOSED, and the census is how we know.** 10,806 of 10,826 blocks
+> have all four walls met exactly by some other block. It works so completely
+> that "does it join" can no longer tell two blocks apart — see `js/measure.js`,
+> where a first scoring attempt tied 82 blocks at a perfect 1.000 and was really
+> sorting alphabetically.
+>
+> **Three new items came out of the walk, and they are ranked at 0f–0h below.**
+> Everything the census found is in `docs/CENSUS.md`; `docs/shelf.txt` is the
+> eighteen blocks it recommends, and `blockshot --recipes @docs/shelf.txt`
+> draws them.
+>
+> **0f. A vault runs, but it cannot land.** THE most actionable finding. An
+> arch's cap is met by 4 blocks out of 10,826 and every one is another arch — so
+> a row of them cancels 6 faces per junction and reads as one continuous barrel
+> (verified: 5 in a row cancel 24), but **there is no ending**. Nothing in the
+> grammar presents a spandrel on one face and a wall on the other, so a vault
+> can run forever or stop in mid-air. `halfVault` was written to be "the piece
+> that lets a vault die into a wall" but its hand picks which *spandrel*
+> survives — it solves the problem along the wrong axis. **What is missing is a
+> springer.** Related and from the same gap: 20 of the 24 half-arches have
+> nothing that can stand on them.
+>
+> **0g. `rounded` can only ever meet itself.** The single dead end in the whole
+> grammar is `S:rounded,rounded,rounded` — its wall is a curved band only
+> `rounded` produces, and since `rounded` is four-fold symmetric there is
+> exactly one such block. A fully rounded pier is a thing you want and at
+> present it can only stand alone. Wants a companion plan: rounded band on one
+> side, slice-plane wall on the other.
+>
+> **0h. 88 blocks contain a sealed chamber** — a void with no way out,
+> unreachable and unlightable. Always the same shape: a `drum` plugs the bore of
+> a `shaft` from below and anything solid closes it from above. Cheap to detect
+> (`measure().chambers`); the question is whether to refuse them, or to keep
+> them as the game's only genuinely secret space.
+>
+> **0e (below) — ~~top of the list~~ CLOSED by the cube law, 2026-08-06.**
+> Kept for the record because the analysis is what the cube law answered:
 >
 > **Composed blocks never cancel a face against each other.** `cancelled` is 0
 > for any run of composed blocks, where a sliced module reports 428. The tagging
@@ -196,7 +239,11 @@ Arch rings should be **explicit wedges**, not smooth curves: 11–15 on a cell
 arch, 25–35 on a great arch, each one block deep and ~0.15 m proud of the wall
 face.
 
-## 10 — Catalogue gaps from the census
+## 10 — Catalogue gaps from the *plate* census
+
+*(The survey of the sixteen Carceri plates — not `docs/CENSUS.md`, which walks
+the block grammar. Two different censuses; the name arrived here first.)*
+
 
 - round guard-turret: 2×2 cylinder, 2–3 cells, overhanging cornice cap, exactly
   one small grated window. Three in a row on a bridge deck *is* plate XI

@@ -57,21 +57,52 @@ measured museum scans of the Carceri plates. It is not this game's look — it i
 wanted for another project, and it is the more interesting renderer of the two.
 `node tools/plateshot.mjs --skin hatch`. Do not let it rot.
 
-**Blocks are composed, not drawn.** A vocabulary of sub-blocks — pier, archway,
-stair, catwalk, balustrade, drum, gantry, chain — is assembled by seeded
-generation into main blocks. The player only ever handles main blocks. You
-cannot hand-author enough Piranesi cubes to keep a builder interesting; you can
-compose them from a dozen parts forever.
+**Blocks are composed, not drawn.** A block is a **stack of plans**: three
+storeys, each a plan cut on the slice lines and extruded. You cannot hand-author
+enough Piranesi cubes to keep a builder interesting; you can compose them from
+sixteen plans forever.
 
-**The one rule that makes it assemble** is the socket ladder: four deck levels
-are the only heights at which anything may cross a block boundary. Constrain the
-joins absolutely and let the middle of a block be as mad as it likes.
+**The one rule that makes it assemble is the cube law.** A block is nine yards
+cubed — nine sub-blocks of one yard each — every cut falls on a slice plane, and
+every curve is struck at R 2.5 or R 4.5. The whole-block circle is *inscribed*,
+so `R_WHOLE === SUB/2` and an arch springs and crowns exactly on the boundary
+planes. Neighbours therefore agree at the seam by construction, their coincident
+faces cancel, and a run of blocks reads as one continuous interior rather than a
+row of boxes. *(This supersedes the socket ladder described further down.)*
 
 ```bash
 npm run serve      # http://localhost:8749
-npm test           # 24 laws
+npm test           # 54 laws
 npm run shot       # pull an impression, headless, to docs/shots/
 ```
+
+## The whole grammar, walked
+
+```bash
+node tools/census.mjs                       # docs/CENSUS.md + census.json + shelf.txt
+node tools/census.mjs --verify              # the self-checks only
+node tools/blockshot.mjs --recipes @docs/shelf.txt --cols 5
+```
+
+The grammar admits **79,016 recipes → 39,508 distinct solids → 10,826 distinct
+blocks** once you take rotation as free at placement. `tools/census.mjs` walks
+all of it in four seconds, measures every block, ranks them and writes
+[`docs/CENSUS.md`](docs/CENSUS.md). Read that file: it is the map of what this
+game can actually build.
+
+It also measures whether the cube law works, and it does — **10,806 of 10,826
+blocks have all four walls met exactly by some other block**, and there are only
+1,048 distinct wall patterns across the whole catalogue, which is why anything
+meets anything.
+
+Four separate measurements in it were wrong at first, all the same way: they
+agreed with everything. `flush` scored 4/4 for 99.8% of blocks, `support`
+returned 100% for every block alive, the composite tied 82 blocks at a perfect
+1.000 while appearing to rank them, and "you can get through this block" was
+satisfied by walking over its roof. **A number that agrees with everything is
+not a measurement.** The census now runs five self-checks each time — including
+Burnside's lemma as an independent derivation of the orbit count — and refuses
+to write if one fails.
 
 ```bash
 node tools/layershot.mjs --layers 3 --layer 1
@@ -82,19 +113,23 @@ node tools/layershot.mjs --layers 3 --layer 1
 ## Composing a block
 
 ```bash
-node tools/blockshot.mjs                  # a contact sheet of 12, with recipes
-node tools/blockshot.mjs --n 24 --cols 6
-node tools/blockshot.mjs --one 3          # one block, big
-node tools/blockshot.mjs --run 3          # three of the SAME block in a row
+node tools/blockshot.mjs                          # a contact sheet of 12, with recipes
+node tools/blockshot.mjs --recipes @docs/shelf.txt   # the blocks the census chose
+node tools/blockshot.mjs --one 3                  # one block, big
+node tools/blockshot.mjs --run 5                  # five of the SAME block in a row
 ```
 
 `--run` is the one that matters: blocks that look fine alone can still refuse to
-meet. And the recipes printed beside the sheet are how you tell a generator that
-has variety from one drawing the same block with the furniture moved.
+meet. Five arches in a row cancel 24 faces — 6 at each junction — so the row
+reads as one barrel vault with no membranes between the bays.
 
-Six archetypes — gate, pier, vault, tower, well, span — carry three to five
-seeded attachments each. Fewer and a block is a component; more and it is soup.
-Piranesi's own density is roughly *one more thing than the space can take*.
+**A block's identity is its recipe**, a short readable string that fully rebuilds
+it, and a save carries the recipes it uses in its own palette. So the generator
+can be changed freely without touching anything already built. `S:ell,bar/1,frame:stone`
+is a stack of three plans; `A:y+:twin:stone` is an arch along y on twin piers.
+Adding a plan is free — no existing recipe mentions it. Renaming or removing one
+breaks every recipe that names it, and `decode` reports those rather than quietly
+substituting something.
 
 ---
 
@@ -241,6 +276,9 @@ them.
 
 | | |
 |---|---|
+| `tools/census.mjs` | **Walks the entire grammar**, measures all 10,826 blocks and ranks them. Five self-checks; refuses to write if one fails. `--verify --check --shelf N` |
+| `tools/blockshot.mjs` | Contact sheets of blocks, by seed or **by name** (`--recipes @file`). `--run N` is the joinery test. |
+| `tools/blockdump.mjs` | Archives the dealt hand as text, so a re-deal is something you *see* in a diff. |
 | `tools/plateshot.mjs` | Pulls an impression headless — the real catalogue, world, camera and engraver. `--scene --eye --yaw --fov --shift --crop --passes --stats` |
 | `tools/tonecheck.mjs` | **The transfer curve.** Hatches a flat wall at known tones and measures the ink. Run it after *any* change to the hatcher, the stroke rasteriser or the register ladder. |
 | `tools/png.mjs` | Zero-dependency PNG writer. The reason the renderer never touches a canvas. |

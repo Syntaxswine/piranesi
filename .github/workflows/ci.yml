@@ -36,5 +36,11 @@ jobs:
       # is something you SEE in a commit rather than something that happens to
       # you.  A saved building is safe either way; its recipes are in the file.
       - run: node tools/blockdump.mjs --check
+      # THE WHOLE GRAMMAR IS ARCHIVED TOO, and for a stronger reason: the hand
+      # is 24 blocks, this is all 10,826.  If a plan is added, retuned or
+      # removed, the diff says what happened to the entire vocabulary — how many
+      # blocks exist, which meet nothing, which grew a sealed chamber.  Its own
+      # self-checks run first and it refuses to write if one fails.
+      - run: node tools/census.mjs --check
       # layershot is the one that would notice the layer feedback going flat.
       - run: node tools/layershot.mjs --layers 3 --layer 1 --size 320x220 --out /tmp/layers.png

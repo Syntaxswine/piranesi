@@ -13,14 +13,20 @@
 //   node tools/blockshot.mjs --seed 500          a different draw
 //   node tools/blockshot.mjs --one 3             one block, big
 //   node tools/blockshot.mjs --run 3             three of the SAME block in a row
+//   node tools/blockshot.mjs --recipes @shelf.txt   NAMED blocks, one per line
+//   node tools/blockshot.mjs --recipes 'S:full,drum,drum:stone A:y+:twin:stone'
 //
 // `--run` is the one that matters for joinery: blocks that look fine alone can
 // still refuse to meet.
+//
+// `--recipes` is what makes the census visible.  Without it this can only draw
+// a hand dealt from a seed, so the twenty-four blocks it shows are the twenty-
+// four nobody chose — and the whole point of walking the grammar is to pick.
 
 import { writePNG } from './png.mjs';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { buildCatalog } from '../js/stack.js';
+import { buildCatalog, add } from '../js/stack.js';
 import { SUB, BLOCK_YARDS, BLOCK_METRES } from '../js/cube.js';
 import { World } from '../js/world.js';
 import { Camera, DEG } from '../js/math.js';
@@ -30,10 +36,33 @@ const argv = process.argv.slice(2);
 const arg = (n, d) => { const i = argv.indexOf(n); return i >= 0 && argv[i + 1] ? argv[i + 1] : d; };
 const has = (n) => argv.includes(n);
 
-const N = Number(arg('--n', '12'));
+let N = Number(arg('--n', '12'));
 const COLS = Number(arg('--cols', '4'));
 const SEED0 = Number(arg('--seed', '1'));
-const cat = buildCatalog(Math.max(N, 1), SEED0);
+
+// A NAMED shelf beats a dealt one.  `@path` reads a file, one recipe a line, so
+// `node tools/census.mjs --shelf 16 > shelf.txt` feeds straight in without
+// anything having to quote a comma.
+const spec = arg('--recipes', '');
+let cat;
+if (spec) {
+  const src = spec[0] === '@' ? readFileSync(resolve(spec.slice(1)), 'utf8') : spec;
+  cat = new Map();
+  const bad = [];
+  // WHITESPACE OR SEMICOLONS, never commas: a recipe's plans are comma
+  // separated, so splitting on those cuts every recipe into three fragments and
+  // reports sixteen unbuildable blocks that are really one list.
+  for (const r of src.split(/[\s;]+/).map((s) => s.trim()).filter(Boolean)) {
+    if (!add(cat, r) && !cat.has(r)) bad.push(r);
+  }
+  // Report, never substitute: a recipe this version cannot build is a thing to
+  // be told about, not to quietly leave a gap in the sheet for.
+  if (bad.length) { console.error(`unbuildable: ${bad.join(', ')}`); process.exit(1); }
+  cat.families = [...new Set([...cat.values()].map((d) => d.family))];
+  if (!argv.includes('--n')) N = cat.size;   // asked for by name: draw them all
+} else {
+  cat = buildCatalog(Math.max(N, 1), SEED0);
+}
 
 const world = new World(cat);
 const ids = [...cat.keys()];

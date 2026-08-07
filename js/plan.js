@@ -16,7 +16,7 @@
 // replaces, for three reasons.
 //
 // 1. THE VARIETY IS COMBINATORIAL AND THE SPEC IS TINY.  Sixteen plans with
-//    their distinct turns is 43 layer choices; three layers is eighty thousand
+//    their distinct turns is 34 layer choices; three layers is eighty thousand
 //    blocks before anything else is added, and every one of them legal by
 //    construction.  The old composer needed six hand-written archetypes to
 //    reach twenty-four.
@@ -33,7 +33,11 @@
 // A plan is a list of closed polygons in the 9 x 9 sub-block square — a list,
 // because a plan may be disconnected: two bars with a gap between them is a plan.
 
-import { SUB, R, R_WHOLE, PLANES } from './cube.js';
+// FOOT is used only on planIsLegal's failure path, to report the offending
+// vertex in feet — which is why it was missing for so long: the checker threw a
+// ReferenceError instead of naming the illegal vertex, at the one moment it
+// existed to be useful.
+import { SUB, R, R_WHOLE, PLANES, FOOT } from './cube.js';
 import { arc } from './mesh.js';
 
 const S = SUB;                       // 9 sub-blocks
@@ -160,25 +164,55 @@ export function bored(r = R) {
  * does not offer four copies of the same block and call it variety.
  */
 export const PLANS = {
-  full: { make: full, turns: 1, mass: 1.00 },
-  ell: { make: () => ell(4.5), turns: 4, mass: 0.75 },
-  'ell-deep': { make: () => ell(6), turns: 4, mass: 0.56 },
-  bar: { make: () => bar(3, 6), turns: 2, mass: 0.33 },
-  'bar-wide': { make: () => bar(2, 7), turns: 2, mass: 0.56 },
-  twin: { make: () => twin(3), turns: 2, mass: 0.67 },
-  corner: { make: () => corner(4.5), turns: 4, mass: 0.25 },
-  tee: { make: () => tee(3), turns: 4, mass: 0.44 },
-  cross: { make: () => cross(3), turns: 1, mass: 0.55 },
-  frame: { make: () => frame(2), turns: 1, mass: 0.69 },
-  notch: { make: () => notch(3, 2.5), turns: 4, mass: 0.92 },
-  rounded: { make: roundedPlan, turns: 1, mass: 0.94 },
-  drum: { make: drum, turns: 1, mass: 0.24 },
-  quarters: { make: quarters, turns: 1, mass: 0.24 },
-  shaft: { make: () => bored(R), turns: 1, mass: 0.76 },
-  bore: { make: () => bored(C), turns: 1, mass: 0.21 },
+  full: { make: full, turns: 1 },
+  ell: { make: () => ell(4.5), turns: 4 },
+  'ell-deep': { make: () => ell(6), turns: 4 },
+  bar: { make: () => bar(3, 6), turns: 2 },
+  'bar-wide': { make: () => bar(2, 7), turns: 2 },
+  twin: { make: () => twin(3), turns: 2 },
+  corner: { make: () => corner(4.5), turns: 4 },
+  tee: { make: () => tee(3), turns: 4 },
+  cross: { make: () => cross(3), turns: 1 },
+  frame: { make: () => frame(2), turns: 1 },
+  notch: { make: () => notch(3, 2.5), turns: 4 },
+  rounded: { make: roundedPlan, turns: 1 },
+  drum: { make: drum, turns: 1 },
+  quarters: { make: quarters, turns: 1 },
+  shaft: { make: () => bored(R), turns: 1 },
+  bore: { make: () => bored(C), turns: 1 },
 };
 
 export const PLAN_IDS = Object.keys(PLANS);
+
+/** How much of the square a plan covers, by the shoelace, summed over its
+ *  disjoint pieces.  Curved plans come out to the tessellation's area rather
+ *  than the true circle's, which is right: the tessellation is what gets built. */
+export function planArea(polys) {
+  let a = 0;
+  for (const poly of polys) {
+    let s = 0;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      s += poly[j][0] * poly[i][1] - poly[i][0] * poly[j][1];
+    }
+    a += Math.abs(s) / 2;
+  }
+  return a;
+}
+
+/**
+ * MASS IS MEASURED, NOT DECLARED.
+ *
+ * It used to be a literal beside each plan, and one of them was wrong by a
+ * factor of one and a half: `ell-deep` claimed 0.56 while `ell(6)` covers 0.89
+ * of the square.  0.56 is the area of `ell(3)` — so the number recorded what
+ * the plan was MEANT to be and the geometry did something else, and the two had
+ * no way of noticing.  `rollRecipe` sorts a stack heaviest-first, so a plan that
+ * is nearly solid had been sorting as though it were half air.
+ *
+ * A derived quantity written down by hand next to the thing it derives from is
+ * a bug with a delay on it.  Compute it.
+ */
+for (const id of PLAN_IDS) PLANS[id].mass = planArea(PLANS[id].make()) / (S * S);
 
 /** Turn a plan a quarter turn at a time about the block's centre.  Rotation is
  *  the only transform a plan gets; nothing is ever mirrored, for the reason
