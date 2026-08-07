@@ -31,5 +31,10 @@ jobs:
       - run: node tools/plateshot.mjs --scene bay --size 300x300 --out /tmp/bay.png
       - run: node tools/moduleshot.mjs --module great-vault --size 300x260 --out /tmp/gv.png
       - run: node tools/blockshot.mjs --n 4 --cols 2 --size 300x260 --out /tmp/blocks.png
+      # THE HAND IS ARCHIVED IN GIT.  If the generator changes what it deals,
+      # this fails and the diff says exactly which blocks moved — so a re-deal
+      # is something you SEE in a commit rather than something that happens to
+      # you.  A saved building is safe either way; its recipes are in the file.
+      - run: node tools/blockdump.mjs --check
       # layershot is the one that would notice the layer feedback going flat.
       - run: node tools/layershot.mjs --layers 3 --layer 1 --size 320x220 --out /tmp/layers.png

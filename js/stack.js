@@ -29,13 +29,14 @@
 import { Mesh, sweep } from './mesh.js';
 import { SUB, R_WHOLE, PRIMARY } from './cube.js';
 import { PLANS, PLAN_IDS, turnPlan } from './plan.js';
+import { stackRecipe, archRecipe, decode, seedOf, label, LAYERS } from './recipe.js';
 import { vault, halfVault, tagFlat } from './forms.js';
 import { insideMesh } from './solidity.js';
 import { arc } from './mesh.js';
 
 const S = SUB;
 const C = S / 2;
-export const LAYERS = 3;
+export { LAYERS };
 /** The horizontal cuts a stacked block uses: his "basic 1/3rd slices".  Finer
  *  ones are legal — 2, 2.5, 6.5 and 7 are slice planes too — but he stuck to
  *  thirds and thirds are what make a stack read as storeys. */
@@ -191,27 +192,23 @@ export function pointOf(a) {
 /* ------------------------------------------------------------- the recipe */
 
 /**
- * One block.  Deterministic in `seed` and nothing else.
- * @returns {{seed, mesh, recipe, family, anchors}}
+ * ROLL a recipe.  This is the only place chance enters, and what it produces is
+ * a STRING — not a block.  Everything downstream builds from that string, so a
+ * block is always the block its recipe says it is, and the generator can change
+ * underneath a saved building without changing it.
  */
-export function composeBlock(seed) {
+export function rollRecipe(seed) {
   const r = rng(seed);
   const mat = chance(r, 0.12) ? 'rustic' : 'stone';
 
   if (chance(r, 0.34)) {
-    // ARCH.  The pier plan is drawn from the ones that leave a way through,
-    // because a vault standing on a solid block is a lid, not an arch.
-    const pierId = pick(r, ['twin', 'bar', 'bar-wide', 'corner', 'quarters', 'ell', 'tee']);
-    const pier = { id: pierId, q: irange(r, 0, PLANS[pierId].turns - 1) };
+    // ARCH.  The pier plan comes from the ones that leave a way through: a
+    // vault standing on a solid block is a lid, not an arch.
+    const id = pick(r, ['twin', 'bar', 'bar-wide', 'corner', 'quarters', 'ell', 'tee']);
+    const pier = { id, q: irange(r, 0, PLANS[id].turns - 1) };
     const axis = chance(r, 0.5) ? 'x' : 'y';
     const hand = chance(r, 0.72) ? 'both' : (chance(r, 0.5) ? 'left' : 'right');
-    const mesh = archMesh(pier, axis, hand, mat);
-    mesh.finish();
-    return {
-      seed, mesh, family: 'arch',
-      recipe: [`arch ${axis}${hand === 'both' ? '' : ' ' + hand}`, `on ${pierId}${pier.q ? '/' + pier.q : ''}`, mat],
-      anchors: anchorsFor(r, mesh),
-    };
+    return archRecipe(axis, hand, pier, mat);
   }
 
   // STACK.  Sorted heaviest-first most of the time, because a block that is
@@ -224,13 +221,36 @@ export function composeBlock(seed) {
     layers.push({ id, q: irange(r, 0, PLANS[id].turns - 1) });
   }
   if (chance(r, 0.7)) layers.sort((a, b) => PLANS[b.id].mass - PLANS[a.id].mass);
-  const mesh = stackMesh(layers, mat);
+  return stackRecipe(layers, mat);
+}
+
+/**
+ * BUILD a block from its recipe.  Total: the same string always gives the same
+ * block, in the browser, in the instruments, and in a save file reopened after
+ * the vocabulary has grown around it.
+ *
+ * @returns a catalogue entry, or null if this version cannot build that recipe.
+ */
+export function blockFromRecipe(recipe) {
+  const d = decode(recipe);
+  if (!d.ok) return null;
+  const mesh = d.family === 'arch'
+    ? archMesh(d.pier, d.axis, d.hand, d.mat)
+    : stackMesh(d.layers, d.mat);
   mesh.finish();
+  // The seed is a hash of the RECIPE, so whatever the recipe does not spell out
+  // — which faces offer an anchor — is still fixed forever by the recipe alone.
+  const anchors = anchorsFor(rng(seedOf(recipe)), mesh);
   return {
-    seed, mesh, family: 'stack',
-    recipe: layers.map((L) => L.id + (L.q ? '/' + L.q : '')).concat(mat),
-    anchors: anchorsFor(r, mesh),
+    id: recipe, recipe, name: label(recipe), family: d.family,
+    size: [SUB, SUB, SUB], rot: true, layer: 'structure',
+    mesh, anchors, tier: PRIMARY, note: recipe,
   };
+}
+
+/** Kept for the instruments that want a block and do not care what it is. */
+export function composeBlock(seed) {
+  return blockFromRecipe(rollRecipe(seed));
 }
 
 /**
@@ -240,34 +260,34 @@ export function composeBlock(seed) {
  * builder needs a vocabulary you can learn — you want to reach for THAT block,
  * the one with the stair going the wrong way.  Endless novelty is the same as
  * no vocabulary at all.  Reroll is a button, not a policy.
+ *
+ * The hand may be re-dealt freely now.  It is a SHELF, not an identity: what a
+ * saved building references is the recipe, so changing what is on the shelf can
+ * no longer change what is already built.
  */
 export function buildCatalog(count = 24, seed0 = 1) {
   const cat = new Map();
   // A plain solid first, always.  It is the most useful block in the game — it
   // is what makes a run of masonry read as one mass — and leaving it to chance
   // would sometimes deal a hand without one.
-  const s = composeBlockFixed('full');
-  cat.set('b0', { ...s, id: 'b0' });
-  for (let i = 1; i < count; i++) {
-    const b = composeBlock(seed0 + i * 7919);
-    cat.set(`b${i}`, {
-      id: `b${i}`, name: `${b.family} ${String(b.seed).slice(-4)}`,
-      family: b.family, size: [SUB, SUB, SUB], rot: true, layer: 'structure',
-      mesh: b.mesh, recipe: b.recipe, seed: b.seed, anchors: b.anchors,
-      tier: PRIMARY, note: b.recipe.join(' + '),
-    });
+  add(cat, `S:full,full,full:stone`);
+  let n = 1, i = 1;
+  while (n < count && i < count * 8) {
+    if (add(cat, rollRecipe(seed0 + i * 7919))) n++;
+    i++;
   }
   cat.families = [...new Set([...cat.values()].map((d) => d.family))];
   return cat;
 }
 
-function composeBlockFixed(planId) {
-  const mesh = stackMesh(Array.from({ length: LAYERS }, () => ({ id: planId, q: 0 })), 'stone');
-  mesh.finish();
-  return {
-    name: planId, family: 'solid', size: [SUB, SUB, SUB], rot: false, layer: 'structure',
-    mesh, recipe: [planId], seed: 0, anchors: [], tier: PRIMARY, note: planId,
-  };
+/** Put a recipe on the shelf.  Idempotent — a recipe IS its id, so rolling the
+ *  same block twice is not a duplicate, it is the same block. */
+export function add(cat, recipe) {
+  if (cat.has(recipe)) return false;
+  const def = blockFromRecipe(recipe);
+  if (!def) return false;
+  cat.set(recipe, def);
+  return true;
 }
 
 export { SUB, C as SPRINGING, R_WHOLE };

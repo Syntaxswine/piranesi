@@ -26,6 +26,9 @@ import { FORMS } from '../js/forms.js';
 import { SAMPLE_OFFSETS } from '../js/solidity.js';
 import { buildCatalog as buildStack } from '../js/stack.js';
 import { survey, KIND_IDS } from '../js/anchors.js';
+import { blockFromRecipe } from '../js/stack.js';
+import { decode } from '../js/recipe.js';
+import { PLANS, PLAN_IDS } from '../js/plan.js';
 
 const catalog = buildCatalog();
 
@@ -666,26 +669,31 @@ test('a wall in front of an anchor makes it unviable, and taking it away brings 
   // in front of that anchor point it wont even be visible because it wont be
   // considered a viable point so you don't have to render it."
   const id = [...stackCat.keys()].find((k) => (stackCat.get(k).anchors || []).length);
-  const solidId = 'b0';
+  // A block's id IS its recipe now, so the plain solid is named by what it is.
+  const solidId = 'S:full,full,full:stone';
+  assert.ok(stackCat.has(solidId), 'the hand must always contain a plain solid');
   const w = new World(stackCat);
   w.place(0, 0, 0, id);
 
-  const before = survey(w, stackCat).filter((s) => s.viable);
-  assert.ok(before.length, 'the test block has no viable anchors to begin with');
+  // COUNT ONLY THE SITES ON THE BLOCK BEING WALLED IN.  The walls are blocks
+  // too and bring their own anchors, so a total across the world goes UP when
+  // you bury something — which is how the first version of this test passed a
+  // broken rule and failed a working one.
+  const mine = () => survey(w, stackCat)
+    .filter((s) => s.block.x === 0 && s.block.y === 0 && s.block.z === 0 && s.viable).length;
 
-  // Wall it in on all four sides.
+  const before = mine();
+  assert.ok(before, 'the test block has no viable anchors to begin with');
+
   for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     w.place(dx * LAYER, dy * LAYER, 0, solidId);
   }
-  const walled = survey(w, stackCat).filter((s) => s.viable);
-  assert.ok(walled.length < before.length,
-    `walling the block in changed nothing: ${before.length} viable before and after`);
+  assert.equal(mine(), 0, `walled in on all four sides, ${mine()} sites are still viable`);
 
   for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     w.remove(dx * LAYER, dy * LAYER, 0);
   }
-  const freed = survey(w, stackCat).filter((s) => s.viable);
-  assert.equal(freed.length, before.length, 'the sites did not come back when the walls did');
+  assert.equal(mine(), before, 'the sites did not come back when the walls went away');
 });
 
 test('a turned block carries its anchors round with it', () => {
@@ -728,4 +736,72 @@ test('a save keeps what the player chose, and a removed block forgets it', () =>
   w.remove(0, 0, 0);
   assert.equal(w.anchorKind(s.id), undefined,
     'a removed block left its settings behind for whatever is put there next');
+});
+
+/* -------------------------------------------------------------- recipes -- */
+
+test('a block\'s identity is its recipe, and a save carries the recipes', () => {
+  // THE BUG THIS PINS.  Blocks were generated into a hand and a save stored the
+  // INDEX — `[0,0,0,"b7"]` — but b7 is not a block, it is a position in a list
+  // re-dealt from a seed on every load.  Measured: adding ONE plan to the
+  // vocabulary changed 15 of the 24 blocks in the hand, and every saved
+  // building still loaded without an error.  It was just made of different
+  // blocks.  Silent, total, and indistinguishable from working.
+  const cat = buildStack(24, 1);
+  const ids = [...cat.keys()];
+  const w = new World(cat);
+  w.place(0, 0, 0, ids[7]);
+  w.place(LAYER, 0, 0, ids[3], 2);
+  const saved = JSON.parse(JSON.stringify(w.toJSON()));
+
+  // The save must name its blocks, not point at a list.
+  assert.ok(Array.isArray(saved.palette) && saved.palette.length === 2);
+  for (const r of saved.palette) assert.ok(decode(r).ok, `the palette holds an unbuildable ${r}`);
+
+  // Now do the thing that used to destroy it: grow the vocabulary and re-deal.
+  const extra = 'octagon-for-the-test';
+  PLANS[extra] = { make: () => PLANS.full.make(), turns: 1, mass: 1 };
+  PLAN_IDS.push(extra);
+  try {
+    const fresh = buildStack(24, 1);
+    const back = World.fromJSON(fresh, saved, (r) => blockFromRecipe(r));
+    const a = [...w.blocks.values()], b = [...back.blocks.values()];
+    assert.equal(b.length, a.length, 'blocks went missing across a re-deal');
+    assert.deepEqual(b.map((x) => x.id), a.map((x) => x.id), 'the building was re-dealt into different blocks');
+    assert.deepEqual(b.map((x) => x.rot), a.map((x) => x.rot));
+    assert.equal(back.missing.length, 0);
+  } finally {
+    delete PLANS[extra];
+    PLAN_IDS.pop();
+  }
+});
+
+test('the same recipe always builds the same block, anchors and all', () => {
+  const r = 'S:rounded,ell,frame:stone';
+  const a = blockFromRecipe(r), b = blockFromRecipe(r);
+  assert.equal(a.mesh.faces.length, b.mesh.faces.length);
+  assert.deepEqual(a.anchors, b.anchors, 'the anchor sites are not determined by the recipe');
+  assert.equal(a.id, r, 'the recipe must BE the id');
+  // …and the anchors must come from the recipe, not from where it sat in a
+  // hand: a block keeps its sites when the vocabulary grows around it.
+  assert.ok(a.anchors.length > 0);
+});
+
+test('a recipe this version cannot build is reported, never substituted', () => {
+  // Quietly swapping in something else would turn a load error into a building
+  // that is subtly not the one that was saved — which is the failure mode this
+  // whole format exists to end.
+  assert.equal(blockFromRecipe('S:no-such-plan,full,full:stone'), null);
+  assert.equal(blockFromRecipe('Q:nonsense'), null);
+  assert.equal(decode('S:full,full:stone').ok, false, 'a stack needs one plan per third');
+  assert.ok(decode('S:no-such-plan,full,full:stone').why.includes('no such plan'));
+
+  const cat = buildStack(4, 1);
+  const back = World.fromJSON(cat, {
+    format: 'piranesi/3',
+    palette: ['S:full,full,full:stone', 'S:invented-later,full,full:stone'],
+    cells: [[0, 0, 0, 0], [LAYER, 0, 0, 1]],
+  }, (r) => blockFromRecipe(r));
+  assert.equal(back.size, 1, 'the unbuildable block was substituted instead of skipped');
+  assert.deepEqual(back.missing, ['S:invented-later,full,full:stone']);
 });

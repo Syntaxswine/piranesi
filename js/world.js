@@ -282,20 +282,64 @@ export class World {
   /* Plain data, sorted, so two identical buildings serialise to identical text
    * and a diff of two saves is a diff of two buildings. */
 
+  /**
+   * A SAVE CARRIES ITS OWN BLOCKS.
+   *
+   * The previous format wrote the block's position in a generated hand —
+   * `[0,0,0,"b7"]` — and b7 is not a block, it is an index into a list that is
+   * re-dealt from a seed on every load.  Measured: adding one plan to the
+   * vocabulary changed 15 of the 24 blocks in the hand, and every saved
+   * building still loaded without an error.  It was just made of different
+   * blocks.
+   *
+   * Now the palette holds RECIPES, which fully determine their blocks, and the
+   * cells index into the palette.  A building cannot be re-dealt by anything,
+   * the file is readable by a human, and a recipe this version cannot build is
+   * reported rather than substituted.
+   */
   toJSON() {
-    const cells = [...this.blocks.values()]
-      .sort((a, b) => a.z - b.z || a.y - b.y || a.x - b.x)
-      .map((c) => (c.rot ? [c.x, c.y, c.z, c.id, c.rot] : [c.x, c.y, c.z, c.id]));
+    const order = [...this.blocks.values()]
+      .sort((a, b) => a.z - b.z || a.y - b.y || a.x - b.x);
+    const palette = [];
+    const index = new Map();
+    const idx = (id) => {
+      if (!index.has(id)) { index.set(id, palette.length); palette.push(id); }
+      return index.get(id);
+    };
+    const cells = order.map((c) => (c.rot
+      ? [c.x, c.y, c.z, idx(c.id), c.rot]
+      : [c.x, c.y, c.z, idx(c.id)]));
     const anchors = [...this.anchors.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
-    return anchors.length
-      ? { format: 'piranesi/2', cells, anchors }
-      : { format: 'piranesi/2', cells };
+    const out = { format: 'piranesi/3', palette, cells };
+    if (anchors.length) out.anchors = anchors;
+    return out;
   }
 
-  static fromJSON(catalog, data) {
+  /**
+   * @param register  called with any recipe the catalogue does not already
+   *   hold, so a building can bring blocks the current shelf has never dealt.
+   *   Return the def, or null if this version cannot build it.
+   * @returns the world; anything it could not build is on `world.missing`.
+   */
+  static fromJSON(catalog, data, register = null) {
     const w = new World(catalog);
-    for (const [x, y, z, id, rot] of data.cells || []) {
-      if (catalog.has(id)) w.place(x, y, z, id, rot || 0);
+    w.missing = [];
+
+    // piranesi/3 and later: cells index a palette of recipes.
+    // Older saves indexed a generated hand by name, which is exactly the bug
+    // this format exists to fix — load them, but say so.
+    const pal = data.palette || null;
+    if (!pal) w.legacy = true;
+
+    for (const [x, y, z, ref, rot] of data.cells || []) {
+      const id = pal ? pal[ref] : ref;
+      if (id == null) continue;
+      if (!catalog.has(id)) {
+        const def = register && register(id);
+        if (!def) { if (!w.missing.includes(id)) w.missing.push(id); continue; }
+        catalog.set(id, def);
+      }
+      w.place(x, y, z, id, rot || 0);
     }
     // AFTER the blocks, always: `place` calls `forgetAnchorsAt`, so loading the
     // choices first would have the building erase them as it went up.

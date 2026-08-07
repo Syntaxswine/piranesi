@@ -20,7 +20,8 @@
 import { writePNG } from './png.mjs';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { composeBlock, buildCatalog, SUB, BLOCK_METRES } from '../js/compose.js';
+import { buildCatalog } from '../js/stack.js';
+import { SUB, BLOCK_YARDS, BLOCK_METRES } from '../js/cube.js';
 import { World } from '../js/world.js';
 import { Camera, DEG } from '../js/math.js';
 import { Engraver } from '../js/engrave.js';
@@ -87,7 +88,7 @@ mkdirSync(dirname(out), { recursive: true });
 const bytes = writePNG(out, img.data, img.width, img.height);
 
 console.log(`${out}  ${W}x${H}  ${(bytes / 1024).toFixed(0)} kB`);
-console.log(`  block = ${SUB} sub-cells = ${BLOCK_METRES} m   ${world.size} placed`);
+console.log(`  block = ${SUB}x${SUB}x${SUB} sub-blocks = ${BLOCK_YARDS} yards = ${BLOCK_METRES.toFixed(3)} m   ${world.size} placed`);
 console.log(`  faces ${r.faces} (${r.visible} visible)  cancelled ${r.cancelled}  strokes ${r.hatchLines}  ${r.ms.total.toFixed(0)} ms  ink ${(r.ink * 100).toFixed(0)}%`);
 console.log('');
 // THE RECIPES. Reading these beside the picture is how you tell a generator
@@ -97,9 +98,8 @@ for (const id of placed) {
   const d = cat.get(id);
   if (seen.has(d.id)) continue;
   seen.add(d.id);
-  console.log(`  ${d.id.padEnd(4)} ${d.archetype ?? d.family.padEnd(6)}  ${d.recipe.join(' + ')}`);
+  console.log(`  ${d.family.padEnd(6)}  ${d.recipe}`);
 }
 const tally = {};
 for (const d of cat.values()) tally[d.family] = (tally[d.family] || 0) + 1;
 console.log('\n  archetype spread: ' + Object.entries(tally).map(([k, v]) => `${k} ${v}`).join('  '));
-void composeBlock;

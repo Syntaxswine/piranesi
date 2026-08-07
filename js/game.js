@@ -22,7 +22,7 @@
 //    pixels and no hatching.
 
 import { World } from './world.js';
-import { buildCatalog } from './stack.js';
+import { buildCatalog, blockFromRecipe } from './stack.js';
 import { SUB } from './cube.js';
 import { survey, fittingAt, KINDS } from './anchors.js';
 import { Camera, projectWith } from './math.js';
@@ -530,8 +530,8 @@ function shelf() {
     for (const d of list) {
       const b = document.createElement('button');
       b.className = 'blk'; b.dataset.id = d.id;
-      b.innerHTML = `<span>${d.id}</span><span class="sz">${d.recipe.length} parts</span>`;
-      b.title = d.recipe.join(' + ');
+      b.innerHTML = `<span>${d.name}</span><span class="sz">${d.family}</span>`;
+      b.title = d.recipe;                       // the recipe IS the identity
       b.onclick = () => choose(d.id);
       box.append(b);
     }
@@ -550,7 +550,7 @@ function hud() {
   const d = catalog.get(state.pick);
   $('#layer').textContent = `layer ${state.layer}`;
   $('#rot').textContent = `turn ${state.rot * 90}°`;
-  $('#recipe').textContent = d ? d.recipe.join(' + ') : '';
+  $('#recipe').textContent = d ? d.recipe : '';
   $('#hud').textContent =
     `${state.world.size} block${state.world.size === 1 ? '' : 's'}` +
     (state.hover ? ` · at ${state.hover[0]},${state.hover[1]}` : '') +
@@ -568,8 +568,18 @@ function load() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return false;
-    const w = World.fromJSON(catalog, JSON.parse(raw));
+    // A saved building brings its own blocks.  `register` lets it put a recipe
+    // on the shelf that this session's hand never dealt — which is the whole
+    // point of the palette: what you built with is not what happens to be on
+    // the shelf today.
+    const w = World.fromJSON(catalog, JSON.parse(raw), (r) => blockFromRecipe(r));
     if (!w.size) return false;
+    if (w.missing && w.missing.length) {
+      // Loudly, and only once.  A block this version cannot build is a thing
+      // the player needs told about, not something to paper over.
+      console.warn(`piranesi: ${w.missing.length} block(s) in the save cannot be ` +
+        `built by this version and were left out:`, w.missing);
+    }
     state.world = w;
     return true;
   } catch { return false; }
