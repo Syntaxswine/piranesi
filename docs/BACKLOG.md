@@ -29,6 +29,32 @@
 > anything built first will be built twice. The rest of the list — the drawing,
 > staffage, ornament — is unaffected and safe to work on.
 >
+> ### ✅ Updated 2026-08-07 (later still) — THE OPENINGS ARE INVENTORIED
+>
+> `docs/APERTURES.md`. The owner's reframe — *"think about it in terms of
+> intersections, where are the openings, how big are they"* — and it makes the
+> system small.
+>
+> **The vertical has no design freedom.** Every opening in the grammar is 3, 6
+> or 9 yards tall with its sill at 0, 3 or 6, because a block is three plans
+> extruded. Only the arches break it.
+>
+> **So a wall is three storeys, each one of TEN WORDS** — out of 512 possible
+> nine-bit words the whole grammar uses thirteen, and three of those occur only
+> in arches. 1,030 of 2,197 triples exist. That is the whole interface language.
+>
+> **0i (NEW). Three plans are the sole source of their word**, and it is
+> expensive: a block showing `chamfer` reaches 29 blocks against a baseline of
+> 239 — **8.1× worse**. `rounded`→`chamfer`, `bar-wide`→`island`,
+> `ell-deep`→`jamb`. A second plan emitting `chamfer` multiplies the reach of
+> 992 blocks by eight, and it need not resemble `rounded` — it only has to leave
+> stone in the same nine yards.
+>
+> **0f and 0i are the same problem in the same language: a word with too few
+> makers.** An arch cap is a word only arches make. The fix in both cases is a
+> new PLAN emitting an existing word from a different shape — not a new block,
+> and not a kit slot.
+>
 > ### ✅ Updated 2026-08-07 (later) — a HUNDRED-BLOCK KIT is chosen
 >
 > `docs/KIT.md` + `docs/kit.txt`, from the role spec in `docs/kit-spec.json`

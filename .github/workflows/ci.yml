@@ -42,6 +42,12 @@ jobs:
       # blocks exist, which meet nothing, which grew a sealed chamber.  Its own
       # self-checks run first and it refuses to write if one fails.
       - run: node tools/census.mjs --check
+      # THE OPENINGS.  The interface vocabulary is 13 edge words out of 512
+      # possible, and three plans are the sole source of their word.  If a plan
+      # is added or retuned those numbers move, and the diff says which word
+      # gained or lost a maker — which is the thing that decides what can ever
+      # meet what.
+      - run: node tools/apertures.mjs --check
       # THE HUNDRED, and the two properties no per-block filter can guarantee:
       # the kit must be ONE joinery component, and every block must have
       # something in the kit it can be set down on.
