@@ -108,13 +108,26 @@ export function notch(w = 3, d = 3) {
 
 /* -------------------------------------------------------------- curved --- */
 
-/** The square with its four vertical arrises rounded at R. */
+/**
+ * The square with its four vertical arrises rounded at R.
+ *
+ * THE CENTRES ARE DERIVED FROM R, not written down beside it. They used to be
+ * the literals 2.5 and 6.5, which are correct only while R happens to be 2.5 —
+ * and `planIsLegal` computes its legal centres AS `[R, R]`, so the two would
+ * disagree the moment anyone touched the radius. Trying exactly that reported
+ * `legality: BROKEN for rounded`, from a plan that had not changed.
+ *
+ * Byte-identical at R = 2.5: the arc is tangent to both walls, so its centre is
+ * at (R, R) by construction, which is what makes the round land on a slice
+ * plane at all. Same family as the `ell-deep` mass bug — a derived quantity
+ * written by hand next to the thing it derives from.
+ */
 export function roundedPlan() {
   return [[
-    ...arc(2.5, 2.5, R, Math.PI, Math.PI * 1.5, STEPS),
-    ...arc(6.5, 2.5, R, Math.PI * 1.5, Math.PI * 2, STEPS),
-    ...arc(6.5, 6.5, R, 0, Math.PI / 2, STEPS),
-    ...arc(2.5, 6.5, R, Math.PI / 2, Math.PI, STEPS),
+    ...arc(R, R, R, Math.PI, Math.PI * 1.5, STEPS),
+    ...arc(S - R, R, R, Math.PI * 1.5, Math.PI * 2, STEPS),
+    ...arc(S - R, S - R, R, 0, Math.PI / 2, STEPS),
+    ...arc(R, S - R, R, Math.PI / 2, Math.PI, STEPS),
   ]];
 }
 
