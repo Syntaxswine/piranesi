@@ -163,14 +163,28 @@ export function wordsByPlan(planMask, planIds, plans, sub = 9) {
  * name. Only `TYPES` below needs changing.
  */
 export const TYPES = [
-  { bits: '111111111', letter: '-', gloss: 'solid; no way through' },
-  { bits: '111000111', letter: 'B', gloss: 'a 3 yd door, centred' },
-  { bits: '111111000', letter: 'C', gloss: 'a 3 yd door against the far jamb' },
-  { bits: '000111111', letter: 'c', gloss: 'the same, handed' },
-  { bits: '111110000', letter: 'D', gloss: 'a 4 yd opening at one end' },
-  { bits: '000011111', letter: 'd', gloss: 'the same, handed' },
-  { bits: '110000011', letter: 'E', gloss: 'a 5 yd opening, centred' },
-  { bits: '000000000', letter: 'O', gloss: 'wholly open, the full 9 yd' },
+  // The owner's own catalogue. A–H are his, verbatim; the rest follow his
+  // stated pattern — symmetric pairs first, then single bars by width, handed —
+  // and are marked so, because he has not assigned them yet.
+  { bits: '000000000', letter: 'A', gloss: 'open on all sides', make: 'bar, bar-wide, corner, drum, tee' },
+  { bits: '111111111', letter: 'B', gloss: 'solid', make: 'ell, ell-deep, frame, full, notch, shaft, twin' },
+  { bits: '110000011', letter: 'C', gloss: '2 + 2', make: null },
+  { bits: '111000111', letter: 'D', gloss: '3 + 3', make: 'bore, notch, quarters, twin' },
+  { bits: '110000000', letter: 'E', gloss: '2, left', make: null },
+  { bits: '000000011', letter: 'F', gloss: '2, right', make: null },
+  { bits: '111000000', letter: 'G', gloss: '3, left', make: null },
+  { bits: '000000111', letter: 'H', gloss: '3, right', make: null },
+  // PROVISIONAL past here.
+  { bits: '111100000', letter: 'I?', gloss: '4, left — NOT EXPRESSIBLE, no plane at 4', make: null },
+  { bits: '000011110', letter: 'J?', gloss: '4, right — likewise', make: null },
+  { bits: '111110000', letter: 'K?', gloss: '5, left', make: 'corner, ell' },
+  { bits: '000011111', letter: 'L?', gloss: '5, right', make: 'corner, ell' },
+  { bits: '111111000', letter: 'M?', gloss: '6, left', make: 'ell-deep' },
+  { bits: '000111111', letter: 'N?', gloss: '6, right', make: 'ell-deep' },
+  { bits: '111111100', letter: 'O?', gloss: '7, left', make: null },
+  { bits: '001111111', letter: 'P?', gloss: '7, right', make: null },
+  { bits: '000111000', letter: 'Q', gloss: '3 centred — two openings', make: 'bar, cross, tee' },
+  { bits: '001111100', letter: 'R', gloss: '5 centred — two openings', make: 'bar-wide' },
 ];
 const LETTER = new Map(TYPES.map((t) => [t.bits, t.letter]));
 
