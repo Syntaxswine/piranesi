@@ -220,14 +220,58 @@ export function signature(profileFor) {
   }).join(', ');
 }
 
-/** How many sides can be walked into — the junction class, in his terms. */
-export function junctionOf(profileFor) {
-  const open = COMPASS.filter(([, side]) => entranceOf(profileFor(side)));
+/** The junction class from a list of the sides that are open, in his terms. */
+function classOf(open) {
   const k = open.length;
   if (k === 0) return 'sealed';
   if (k === 1) return 'dead-end';
   if (k === 3) return 'T';
   if (k === 4) return '+';
-  const [a, b] = open.map(([n]) => n);
+  const [a, b] = open;
   return (a === 'N' && b === 'S') || (a === 'E' && b === 'W') ? 'I' : 'L';
 }
+
+/**
+ * How many sides have an opening ANYWHERE up the block — which is POROSITY, and
+ * it is deliberately not the same question as the one below. Kept because it is
+ * the honest answer to "can light get in from that side", and because knowing
+ * the two differ is the whole point.
+ */
+export function junctionOf(profileFor) {
+  return classOf(COMPASS.filter(([, side]) => entranceOf(profileFor(side))).map(([n]) => n));
+}
+
+/**
+ * THE JUNCTION YOU CAN WALK, one storey at a time — and THIS is the one that
+ * classifies a block.
+ *
+ * `junctionOf` counts a side as open if anything on it is open at any height,
+ * and measured across the grammar that returns **`+` for 93% of blocks**. It is
+ * not wrong, it is answering about porosity; but a label that says the same
+ * thing about nine blocks in ten is not a label. A number that agrees with
+ * everything is not a measurement — handoff §2.1, for the fifth time.
+ *
+ * Asked one floor at a time it separates properly, because you cannot walk from
+ * a door on the ground into a window on the second storey. Measured over 4,183
+ * blocks sampled across the grammar:
+ *
+ *     any floor    + 93%   T  5%   I/L  2%   dead-end 0%   sealed 0%
+ *     GROUND       + 47%   I/L 28%  T  12%   sealed   7%   dead-end 6%
+ *     best floor   + 85%   T 10%   I/L  4%   dead-end 0%   sealed 0%
+ *
+ * All five of his classes are populated on the ground reading and the largest
+ * is under half. That is what makes it usable as a name.
+ *
+ * @param k 0, 1, 2 — the storey, from the ground.
+ */
+export function junctionOnFloor(profileFor, k = 0) {
+  const open = COMPASS.filter(([, side]) => {
+    const w = wordsOfWall(profileFor(side))[k];
+    return w && w.includes('0');
+  }).map(([n]) => n);
+  return classOf(open);
+}
+
+/** All three storeys at once — `+ / T / I` reads as a section through the
+ *  block: a crossing on the ground, a T above it, a run at the top. */
+export const junctionsOf = (profileFor) => [0, 1, 2].map((k) => junctionOnFloor(profileFor, k));

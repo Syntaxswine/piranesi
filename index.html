@@ -55,6 +55,30 @@
   #layer { font-size: 13px; letter-spacing: .06em; }
   #rot { color: var(--hot); margin-left: auto; }
 
+  /* The saved buildings.  Collapsed by default: it is a list you open when you
+     want it, and the shelf is what you are looking at the rest of the time. */
+  #saves { border-bottom: 1px solid #131211; padding: 6px 8px 8px; }
+  #saves summary {
+    cursor: pointer; color: var(--rule); font-size: 9px;
+    text-transform: uppercase; letter-spacing: .16em; padding: 2px 2px 6px;
+  }
+  #saves summary:hover { color: var(--ground); }
+  #savelist { margin-bottom: 6px; }
+  #savelist .row2 { display: flex; gap: 4px; margin-bottom: 3px; }
+  #savelist .pick {
+    flex: 1; padding: 3px 6px; text-align: left; font: inherit; cursor: pointer;
+    background: #2e2c28; color: var(--ground); border: 1px solid #3d3a34;
+    border-radius: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #savelist .pick:hover { background: #383530; }
+  #savelist .pick.on { border-color: var(--hot); color: var(--ground); }
+  #savelist .drop {
+    width: 22px; padding: 0; font: inherit; cursor: pointer; color: var(--rule);
+    background: #2e2c28; border: 1px solid #3d3a34; border-radius: 2px;
+  }
+  #savelist .drop:hover { color: var(--hot); }
+  #savelist .none { color: var(--rule); font-size: 9.5px; padding: 2px; }
+
   #shelf { flex: 1; overflow-y: auto; padding: 6px 8px 12px; }
   .fam {
     color: var(--rule); text-transform: uppercase; letter-spacing: .16em;
@@ -85,7 +109,7 @@
   }
   button.act:hover { background: #383530; }
   #mode { text-transform: uppercase; letter-spacing: .12em; }
-  #hud { color: var(--rule); font-size: 9.5px; line-height: 1.5; word-break: break-word; }
+  #hud { color: var(--rule); font-size: 9.5px; line-height: 1.5; word-break: break-word; white-space: pre-line; }
   kbd {
     background: #2e2c28; border: 1px solid #3d3a34; border-bottom-width: 2px;
     border-radius: 2px; padding: 0 3px; font: inherit; color: var(--ground);
@@ -124,6 +148,21 @@
       <span id="layer">layer 0</span>
       <span id="rot">turn 0°</span>
     </div>
+
+    <!-- The buildings you have saved. A <details> because it is a list you
+         open when you want it and never otherwise, and native beats a widget. -->
+    <details id="saves">
+      <summary>buildings</summary>
+      <div id="savelist"></div>
+      <div class="row">
+        <button class="act" id="saveas">save as</button>
+        <button class="act" id="newb">new</button>
+      </div>
+      <div class="row">
+        <button class="act" id="exportb">export</button>
+        <button class="act" id="importb">import</button>
+      </div>
+    </details>
 
     <div id="shelf"></div>
 

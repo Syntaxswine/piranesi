@@ -74,7 +74,7 @@ row of boxes. *(This supersedes the socket ladder described further down.)*
 
 ```bash
 npm run serve      # http://localhost:8749
-npm test           # 89 laws
+npm test           # 105 laws
 npm run shot       # pull an impression, headless, to docs/shots/
 ```
 
@@ -238,9 +238,55 @@ game allows is 45° and a longer run is a gentler one. It is a wedge belonging t
 the layer it climbs, which makes that rule something the grammar checks rather
 than a note in a document. Drag the way you walk up.
 
-Press **to the shelf** and the game deals the block beside the generated hand.
-The recipe is the whole document: it is what is saved, what is in the box, what
-is in the URL, and what a building carries with it.
+Press **keep** and the game deals the block beside the generated hand — in the
+other tab, live, without a reload. The recipe is the whole document: it is what
+is saved, what is in the box, what is in the URL, and what a building carries
+with it.
+
+---
+
+## Saving, and the names
+
+```bash
+node tools/blockshot.mjs --recipes @piranesi-blocks-7.txt --cols 4   # your shelf
+node tools/plateshot.mjs --load piranesi-the-long-gallery.json       # your building
+```
+
+**A save gets out of the browser, and the instruments read it.** `js/store.js`
+owns everything kept: the shelf of blocks you drew, the buildings you built, and
+the two file kinds. Neither file is a new format — a shelf exports as **one
+recipe a line**, which is what [`docs/kit.txt`](docs/kit.txt) is; a building
+exports as `World.toJSON`, which is what [`docs/sample-save.json`](docs/sample-save.json)
+is. So the moment a save lands on disk, every instrument in the project can draw
+it. That is what makes a saved thing *yours* rather than a row in a browser's
+local storage.
+
+**A block's name is computed from its recipe.** Never typed, never stored,
+regenerated every time it is read — the same law as
+[`js/plan.js`](js/plan.js)'s mass, applied to words. A name written beside a
+recipe starts lying the day either changes.
+
+```
+# x-bore-c3v · + + + · 20% stone · open to the sky, 2 anchors
+D:*b,*d,~occo:stone
+```
+
+`x` is the **junction on the ground floor** in the owner's own terms (`+ T I L`,
+dead-end, sealed); `bore` is the rarest thing about the block; `c3v` is three
+characters of the recipe's own hash, so two blocks that are alike stay tellable
+apart. The three glyphs after it are the junction of each storey — a section
+through the block.
+
+The junction had to be measured before it could be trusted. Asked "is any side
+open anywhere up the block", **93% of the grammar answers `+`** — that is
+porosity, not a classification. Asked one storey at a time it separates
+properly: `+` 47%, `I`/`L` 28%, `T` 12%, sealed 7%, dead-end 6%. *A number that
+agrees with everything is not a measurement*, for the fifth time in this repo.
+
+**What a save refuses to do quietly:** overwrite a corrupt shelf, swallow a
+storage-quota failure, drop a recipe this version cannot build, or import a file
+that turns out to be something else. Each of those is reported where you are
+looking.
 
 ```bash
 node tools/blockshot.mjs --recipes 'D:40ei044ee4ie~cccc,004i!609in,6eii:stone' --run 3
@@ -415,6 +461,9 @@ index.html          the game
 draw.html           the drawing board — design one block by hand
 js/drawn.js         the D: family: the slice grid, the partition, the ramp
 js/draw.js          the board's shell: tools, layers, the mini screen
+js/naming.js        a block's name, computed from its recipe
+js/store.js         everything kept: the shelf, the buildings, the two files
+js/files.js         the two calls that need a DOM: download, and pick
 js/math.js          axes, the shift projection, deterministic hashes
 js/ink.js           the plate: transmittance, strokes, paper, develop
 js/mesh.js          geometry + the per-face (u,v) frame that makes it an engraving

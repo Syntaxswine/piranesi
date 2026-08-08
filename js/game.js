@@ -23,6 +23,9 @@
 
 import { World } from './world.js';
 import { buildCatalog, blockFromRecipe, add } from './stack.js';
+import { Store, buildingToFile, readFile } from './store.js';
+import { download, pickFile } from './files.js';
+import { describe } from './naming.js';
 import { SUB } from './cube.js';
 import { survey, fittingAt, KINDS } from './anchors.js';
 import { Camera, projectWith } from './math.js';
@@ -38,9 +41,11 @@ const ctx = canvas.getContext('2d');
 const stage = $('#stage');
 
 const DRAFT = 0.42;
+/** `?slot=` was the only way to have a second building, and it was a URL
+ *  parameter nobody could discover. Kept as a way to OPEN one by name. */
 const SLOT = new URLSearchParams(location.search).get('slot') || '';
-const SAVE_KEY = 'piranesi/save' + (SLOT ? ':' + SLOT : '');
 
+const store = new Store();
 const catalog = buildCatalog(24, 1);
 drawnShelf(catalog);
 const ids = [...catalog.keys()];
@@ -48,23 +53,18 @@ const ids = [...catalog.keys()];
 /**
  * THE BLOCKS THE PLAYER DREW, dealt beside the generated hand.
  *
- * `draw.html` writes `D:` recipes to this key; the game reads them at boot and
- * puts them on the shelf.  It is a one-way channel on purpose — the board owns
- * the list, the game only reads it — so a bug in either cannot corrupt the
- * other's state, and a building that uses a drawn block is safe regardless: its
- * save carries the recipe, and `World.fromJSON` registers anything the shelf has
- * never heard of.  Take a block off the shelf and every building made with it
- * still loads.
+ * `draw.html` keeps them; the game reads them.  A one-way channel on purpose —
+ * the board owns the list — so a bug in either cannot corrupt the other's state,
+ * and a building that uses a drawn block is safe regardless: its save carries
+ * the recipe, and `World.fromJSON` registers anything the shelf has never heard
+ * of.  Take a block off the shelf and every building made with it still loads.
  *
- * Reported and never substituted, same as everywhere else: a drawing this
- * version cannot build says so in the console rather than leaving a silent gap.
+ * Reported and never substituted: a drawing this version cannot build says so
+ * rather than leaving a silent gap.
  */
 function drawnShelf(cat) {
-  let list = [];
-  try { list = JSON.parse(localStorage.getItem('piranesi/drawn') || '[]'); } catch { return; }
-  if (!Array.isArray(list)) return;
-  const bad = list.filter((r) => typeof r !== 'string' || (!add(cat, r) && !cat.has(r)));
-  if (bad.length) console.warn(`piranesi: ${bad.length} drawn block(s) could not be built:`, bad);
+  for (const r of store.blocks()) if (!add(cat, r) && !cat.has(r)) console.warn(`piranesi: cannot build ${r}`);
+  for (const p of store.drain()) console.warn('piranesi:', p);
 }
 
 const state = {
@@ -88,6 +88,8 @@ const state = {
   sites: [],
   sitesAt: -1,
   picking: null,                     // the site whose menu is open
+  /** The name of the building being worked on. The autosave writes into it. */
+  open: '',
 };
 
 const camera = new Camera({});
@@ -575,38 +577,123 @@ function hud() {
   $('#rot').textContent = `turn ${state.rot * 90}°`;
   $('#recipe').textContent = d ? d.recipe : '';
   $('#hud').textContent =
-    `${state.world.size} block${state.world.size === 1 ? '' : 's'}` +
+    `${state.open} · ${state.world.size} block${state.world.size === 1 ? '' : 's'}` +
     (state.hover ? ` · at ${state.hover[0]},${state.hover[1]}` : '') +
     (s ? ` · ${s.visible} faces${s.ghosted ? ` (${s.ghosted} ghosted)` : ''}` +
-      ` · ${s.hatchLines} strokes · ${s.ms.total.toFixed(0)} ms` : '');
+      ` · ${s.hatchLines} strokes · ${s.ms.total.toFixed(0)} ms` : '') +
+    (noted ? `\n${noted}` : '');
 }
 
 /* ---------------------------------------------------------------- the save */
 
+/**
+ * THE AUTOSAVE, which now has somewhere to go.
+ *
+ * It writes into the building that is OPEN. Before, there was one anonymous
+ * slot and everything you built overwrote everything you had built; the only
+ * second slot was a `?slot=` URL parameter nobody could discover. A quota
+ * failure used to be swallowed by an empty catch — the game would carry on
+ * placing blocks, saving none of them, and you found out on reload. It is
+ * reported now, in the HUD, where you are looking.
+ */
 function save() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(state.world.toJSON())); } catch { /* full */ }
+  const view = { centre: state.centre.slice(), layer: state.layer, yaw: state.yaw, zoom: state.zoom };
+  if (!store.saveBuilding(state.open, state.world.toJSON(), view)) {
+    for (const p of store.drain()) note(p);
+  }
+  buildings();
 }
 
-function load() {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return false;
-    // A saved building brings its own blocks.  `register` lets it put a recipe
-    // on the shelf that this session's hand never dealt — which is the whole
-    // point of the palette: what you built with is not what happens to be on
-    // the shelf today.
-    const w = World.fromJSON(catalog, JSON.parse(raw), (r) => blockFromRecipe(r));
-    if (!w.size) return false;
-    if (w.missing && w.missing.length) {
-      // Loudly, and only once.  A block this version cannot build is a thing
-      // the player needs told about, not something to paper over.
-      console.warn(`piranesi: ${w.missing.length} block(s) in the save cannot be ` +
-        `built by this version and were left out:`, w.missing);
-    }
-    state.world = w;
-    return true;
-  } catch { return false; }
+/** Open a building by name. A saved building brings its own blocks: `register`
+ *  lets it put a recipe on the shelf this session's hand never dealt, which is
+ *  the whole point of the palette. */
+function openBuilding(name) {
+  const rec = store.building(name);
+  if (!rec) return false;
+  const w = World.fromJSON(catalog, rec.world, (r) => blockFromRecipe(r));
+  if (w.missing && w.missing.length) {
+    note(`${w.missing.length} block(s) in "${name}" cannot be built by this version`);
+    console.warn('piranesi: cannot build:', w.missing);
+  }
+  state.world = w;
+  state.open = name;
+  store.setOpen(name);
+  if (rec.view) {
+    state.centre = rec.view.centre ? rec.view.centre.slice() : state.centre;
+    state.layer = rec.view.layer ?? state.layer;
+    state.yaw = rec.view.yaw ?? state.yaw;
+    state.zoom = rec.view.zoom ?? state.zoom;
+  }
+  buildings();
+  setLayer(state.layer);
+  invalidate(0);
+  return true;
 }
+
+/**
+ * A SUGGESTION, offered at the moment of naming and never afterwards.
+ *
+ * A BLOCK's name is derived and regenerated on every read, because a block has
+ * a grammar to be read back out of (naming.js). A BUILDING does not: what it is
+ * called is a label the player chooses, and the honest thing is to say so. The
+ * first version derived this into `state.open` at boot and left it there, so a
+ * building that started with one block was still called "1 blocks · 1×1×1" when
+ * it had forty — a derived quantity that had quietly stopped deriving, which is
+ * the bug this project keeps meeting. Now it only ever fills in a prompt.
+ */
+function suggestName(w = state.world) {
+  const b = w.bounds();
+  if (!b) return 'untitled';
+  const storeys = Math.ceil((b.hi[2] - b.lo[2]) / LAYER);
+  const across = Math.ceil((b.hi[0] - b.lo[0]) / LAYER);
+  const deep = Math.ceil((b.hi[1] - b.lo[1]) / LAYER);
+  return `${w.size} block${w.size === 1 ? '' : 's'} · ${across}×${deep}×${storeys}`;
+}
+
+function uniqueName(want) {
+  const taken = new Set(store.buildings().map((b) => b.name));
+  if (!taken.has(want)) return want;
+  for (let i = 2; ; i++) if (!taken.has(`${want} (${i})`)) return `${want} (${i})`;
+}
+
+/* ------------------------------------------------------- the buildings list */
+
+function buildings() {
+  const box = $('#savelist');
+  if (!box) return;
+  const list = store.buildings();
+  box.innerHTML = '';
+  if (!list.length) {
+    box.innerHTML = '<div class="none">Nothing saved yet.</div>';
+    return;
+  }
+  for (const b of list) {
+    const row = document.createElement('div');
+    row.className = 'row2';
+    const pick = document.createElement('button');
+    pick.className = 'pick' + (b.name === state.open ? ' on' : '');
+    pick.textContent = b.name;
+    pick.title = `${(b.world.cells || []).length} cells · ${(b.world.palette || []).length} kinds of block`;
+    pick.onclick = () => { openBuilding(b.name); note(`opened "${b.name}"`); };
+    const x = document.createElement('button');
+    x.className = 'drop';
+    x.textContent = '×';
+    x.title = 'delete this building';
+    x.onclick = () => {
+      if (!confirm(`Delete "${b.name}"? This cannot be undone.`)) return;
+      store.removeBuilding(b.name);
+      if (state.open === b.name) state.open = uniqueName('untitled');
+      buildings();
+      note(`deleted "${b.name}"`);
+    };
+    row.append(pick, x);
+    box.append(row);
+  }
+}
+
+/** A line in the HUD that survives the next stats update. */
+let noted = '';
+function note(msg) { noted = msg; hud(); }
 
 /* ----------------------------------------------------------------- go ----- */
 
@@ -617,16 +704,102 @@ $('#clear').onclick = () => {
   save(); invalidate();
 };
 
-shelf();
-if (!load()) {
-  // A first block, so the board is never an empty promise.
+/* ------------------------------------------------------------ save, as files */
+
+$('#saveas').onclick = () => {
+  const want = prompt('Call this building what?', state.open || suggestName());
+  if (want == null) return;
+  const name = want.trim() || suggestName();
+  if (store.building(name) && name !== state.open
+    && !confirm(`"${name}" already exists. Overwrite it?`)) return;
+  state.open = name;
+  save();
+  note(`saved as "${name}"`);
+};
+
+$('#newb').onclick = () => {
+  if (state.world.size && !confirm('Start a new building? The one you are on is saved under its own name.')) return;
+  save();                                       // keep what is there, then leave it
+  state.world = new World(catalog);
   state.world.place(0, 0, 0, ids[0]);
+  state.open = uniqueName('untitled');
+  save();
+  note(`started "${state.open}"`);
+  invalidate(0);
+};
+
+$('#exportb').onclick = () => {
+  if (!state.world.size) return note('nothing built to export');
+  const f = buildingToFile(state.open, state.world.toJSON());
+  download(f);
+  note(`${f.name} — draw it with: node tools/plateshot.mjs --load ${f.name}`);
+};
+
+$('#importb').onclick = async () => {
+  const picked = await pickFile();
+  if (!picked) return;
+  if (picked.error) return note(picked.error);
+  const got = readFile(picked.text);
+  if (got.kind === 'bad') return note(got.why);
+  if (got.kind === 'blocks') {
+    // A shelf file opened in the game: put its blocks on the shelf rather than
+    // refusing. It is obviously what was meant, and it costs nothing.
+    let n = 0;
+    for (const r of got.recipes) if (add(catalog, r)) n++;
+    shelf();
+    return note(`${n} block(s) added to the shelf${got.bad.length ? ` · ${got.bad.length} unbuildable` : ''}`);
+  }
+  const name = uniqueName(picked.name.replace(/\.json$/i, '') || 'imported');
+  state.open = name;
+  store.saveBuilding(name, got.world);
+  if (!openBuilding(name)) return note('that building would not open');
+  note(`opened "${name}"`);
+};
+
+/**
+ * ANOTHER TAB CHANGED THE SHELF.
+ *
+ * Drawing a block and then building with it is the normal way round, so the
+ * board and the game are normally open at once — and `storage` fires in the
+ * OTHER tabs. Without this you have to know to reload the game, which is
+ * exactly the kind of thing nobody tells you.
+ */
+addEventListener('storage', (e) => {
+  if (e.key !== 'piranesi/shelf') return;
+  const before = catalog.size;
+  drawnShelf(catalog);
+  if (catalog.size !== before) {
+    ids.length = 0;
+    ids.push(...catalog.keys());
+    shelf();
+    note(`${catalog.size - before} block(s) arrived from the drawing board`);
+  }
+});
+
+/* ----------------------------------------------------------------- go ----- */
+
+shelf();
+{
+  // Open the building that was open last, or the one named by `?slot=`, or the
+  // first there is — and only make a new one if there is genuinely nothing.
+  const first = store.buildings()[0];
+  const want = SLOT || store.openName() || (first && first.name);
+  for (const p of store.drain()) console.warn('piranesi:', p);
+  if (!want || !openBuilding(want)) {
+    state.world.place(0, 0, 0, ids[0]);         // never an empty promise
+    state.open = uniqueName('untitled');
+  }
+  buildings();
 }
 setMode(BUILD);
-setLayer(0);
+setLayer(state.layer);
 fit();
 requestAnimationFrame(frame);
 
 // Handy from the console and from the browser instruments.
-window.piranesi = { state, catalog, camera, full, draft, save, load, setLayer, setMode, bite, invalidate };
+window.piranesi = {
+  state, catalog, camera, full, draft, store,
+  save, openBuilding, buildings, setLayer, setMode, bite, invalidate,
+  describe,
+};
 void SUB;

@@ -236,6 +236,35 @@
 > pass. `serve.mjs --shots` does the same job from the server the page is
 > already on: no second process, no CORS, `fetch('/__shot', …)`. Grep the tree
 > before you build — this one was found *after* the duplicate was written.
+>
+> ### ✅ Updated 2026-08-08 — SAVING, and procedural names
+>
+> `js/store.js` / `js/naming.js` / `js/files.js`. A shelf of blocks and a
+> library of named buildings, both exportable to files this repo ALREADY reads —
+> one recipe a line for a shelf, `World.toJSON` for a building — so every
+> instrument can draw a save the moment it lands. `docs/sample-save.json` is
+> committed and CI draws it. A block's name is COMPUTED from its recipe, in the
+> owner's junction terms, and rides in a `#` comment.
+>
+> Two bugs fell out: `plateshot --load` was drawing blank plates and reporting
+> success (legacy catalogue, no `register`), and a corrupt shelf was being
+> overwritten by the migration because `get()` conflated absent with unreadable.
+>
+> **0r (NEW). The kit spec's role filters cannot see the D: family.** `js/kit.js`
+> `featuresOf` keys on plan ids, so a hand-drawn block has no `plans` and matches
+> almost no role. Nothing is broken — the kit is chosen from the enumerated
+> grammar and drawn blocks are not in it — but the day somebody wants
+> `assemble.mjs` to tile with a hand-drawn shelf, this is what stops it.
+>
+> **0s (NEW). There is no undo in the game.** The board has one; the game has an
+> autosave and a `clear` behind a `confirm`. Now that buildings are named and
+> plural, the cheap version is a "revert to last saved" rather than a real undo
+> stack.
+>
+> **0t (NEW). A building's view is stored but not exported.** Deliberate — you
+> send somebody a building, not your camera — but it means an imported building
+> opens at the default view, which is disorienting for a big one. A `--eye` hint
+> in the file, ignored by `World.fromJSON`, would fix it for `plateshot` too.
 
 Ranked by how much Carceri each buys. Sources are five research briefs
 (etching craft, a census of the sixteen plates, the spatial scholarship, the NPR

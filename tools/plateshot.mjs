@@ -9,7 +9,19 @@
 //   node tools/plateshot.mjs --scene carceri --out docs/shots/carceri.png
 //   node tools/plateshot.mjs --scene probe --size 1400x700 --yaw 60 --eye 4,-14,2
 //   node tools/plateshot.mjs --scene bay --passes lines        (line pass only)
+//   node tools/plateshot.mjs --load my-building.json           A BUILDING YOU SAVED
 //
+// `--load` IS WHY YOU SAVE.  The browser draws a proof; this draws the plate —
+// full size, supersampled, hatched, from the same renderer. It is the thing that
+// turns "a file I can reload" into "a picture of what I built".
+//
+// IT USED TO RETURN A BLANK PLATE AND CALL IT A SUCCESS.  A save's palette holds
+// RECIPES, and this was building its catalogue from `js/blocks.js` — the legacy
+// hand-authored one, which knows none of them — with no `register` callback, so
+// every block in the file went to `world.missing` and nothing read it. A save of
+// four blocks came back "blocks 0, faces 0" and wrote 52 kB of empty paper.
+//
+
 // `--stats` prints the value histogram, which is the number that matters most:
 // a Carceri is a dark, bimodal object.  If the plate is a fat hump of mid-grey
 // the renderer has drawn a technical illustration.
@@ -18,6 +30,7 @@ import { writePNG } from './png.mjs';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { buildCatalog } from '../js/blocks.js';
+import { blockFromRecipe } from '../js/stack.js';
 import { buildScene, scenes, catalogFor } from '../js/scenes.js';
 import { World } from '../js/world.js';
 import { Camera, DEG } from '../js/math.js';
@@ -39,10 +52,31 @@ const out = resolve(arg('--out', `docs/shots/${sceneId}.png`));
 const ss = Number(arg('--ss', '2'));
 
 // A cube scene's world is expressed in the MODULE registry, not the block one.
-const catalog = catalogFor(sceneId, buildCatalog());
-const world = has('--load')
-  ? World.fromJSON(catalog, JSON.parse(readFileSync(arg('--load'), 'utf8')))
-  : buildScene(sceneId, catalog);
+// A SAVED BUILDING is expressed in neither: its palette holds recipes, and the
+// only thing that can build one of those is `blockFromRecipe`. So a load starts
+// from an empty catalogue and lets the file fill it — which is the whole point
+// of a save carrying its own blocks.
+let world;
+if (has('--load')) {
+  const data = JSON.parse(readFileSync(arg('--load'), 'utf8'));
+  const cat = new Map();
+  world = World.fromJSON(cat, data, (r) => blockFromRecipe(r));
+  if (world.missing && world.missing.length) {
+    console.error(`this version cannot build ${world.missing.length} of the recipes in that file:`);
+    for (const r of world.missing) console.error(`  ${r}`);
+  }
+  // REFUSE TO DRAW NOTHING. A blank plate reported as a success is how this
+  // went unnoticed: every recipe in a four-block save was dropped and the tool
+  // wrote 52 kB of empty paper and printed a filename.
+  if (!world.size) {
+    console.error(`nothing in ${arg('--load')} could be built — refusing to write an empty plate`);
+    process.exit(1);
+  }
+  var catalog = cat;
+} else {
+  catalog = catalogFor(sceneId, buildCatalog());
+  world = buildScene(sceneId, catalog);
+}
 
 const eye = arg('--eye', null);
 const cam = new Camera({

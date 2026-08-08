@@ -49,10 +49,15 @@ if (spec) {
   const src = spec[0] === '@' ? readFileSync(resolve(spec.slice(1)), 'utf8') : spec;
   cat = new Map();
   const bad = [];
+  // `#` TO END OF LINE IS A COMMENT, stripped before anything else. That is what
+  // lets a saved shelf carry the NAMES the player gave its blocks and still be
+  // the same file every instrument in this repo already eats — a name is a
+  // label, never an identity, so it belongs in a comment and nowhere else.
+  const bare = src.replace(/#[^\n]*/g, ' ');
   // WHITESPACE OR SEMICOLONS, never commas: a recipe's plans are comma
   // separated, so splitting on those cuts every recipe into three fragments and
   // reports sixteen unbuildable blocks that are really one list.
-  for (const r of src.split(/[\s;]+/).map((s) => s.trim()).filter(Boolean)) {
+  for (const r of bare.split(/[\s;]+/).map((s) => s.trim()).filter(Boolean)) {
     if (!add(cat, r) && !cat.has(r)) bad.push(r);
   }
   // Report, never substitute: a recipe this version cannot build is a thing to

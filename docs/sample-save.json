@@ -1,0 +1,19 @@
+{
+ "format": "piranesi/3",
+ "palette": [
+  "D:00ii,004i!609in,6eii:stone",
+  "D:~oooo,~oooo,~oooo:stone",
+  "D:*b,*d,~occo:stone",
+  "S:full,full,full:stone"
+ ],
+ "cells": [
+  [0,0,0,0],
+  [9,0,0,0],
+  [18,0,0,0],
+  [0,9,0,1],
+  [9,9,0,2],
+  [18,9,0,1],
+  [0,18,0,3],
+  [9,18,0,3]
+ ]
+}

@@ -38,6 +38,9 @@ import {
 } from './drawn.js';
 import { SUB, R, R_WHOLE } from './cube.js';
 import { blockFromRecipe } from './stack.js';
+import { Store, KEYS, blocksToFile, readFile } from './store.js';
+import { download, pickFile } from './files.js';
+import { describe } from './naming.js';
 import { World } from './world.js';
 import { Camera, DEG, projectWith } from './math.js';
 import { Engraver } from './engrave.js';
@@ -45,8 +48,7 @@ import { Engraver } from './engrave.js';
 const $ = (s) => document.querySelector(s);
 const S = SUB;
 
-const DRAFT_KEY = 'piranesi/drawing';
-const SHELF_KEY = 'piranesi/drawn';
+const store = new Store();
 
 /* ------------------------------------------------------------- the state -- */
 
@@ -868,30 +870,41 @@ function say(msg, warn = false) {
 /* --------------------------------------------------------------- the shelf */
 
 function loadShelf() {
-  try { state.shelf = JSON.parse(localStorage.getItem(SHELF_KEY) || '[]'); } catch { state.shelf = []; }
-  if (!Array.isArray(state.shelf)) state.shelf = [];
+  state.shelf = store.blocks();
+  for (const p of store.drain()) say(p, true);
   shelf();
 }
 
 function saveShelf() {
-  try { localStorage.setItem(SHELF_KEY, JSON.stringify(state.shelf)); } catch { say('the shelf is full', true); }
+  store.setBlocks(state.shelf);
+  for (const p of store.drain()) say(p, true);
   shelf();
 }
 
+/**
+ * THE SHELF, LABELLED BY THE GRAMMAR.
+ *
+ * The rows used to show the raw recipe body, which is the identity and tells
+ * you nothing. They show the PROCEDURAL NAME now — his junction class, the
+ * rarest thing about the block, and three characters of the recipe's own hash —
+ * computed fresh from the recipe every time this runs. See naming.js: a label
+ * stored beside a recipe is a label that will one day be wrong.
+ */
 function shelf() {
   const box = $('#shelf');
   box.innerHTML = '';
   if (!state.shelf.length) {
-    box.innerHTML = '<div class="none">Nothing on it yet. Draw a block and press <b>to the shelf</b>; the game deals it beside the generated hand.</div>';
+    box.innerHTML = '<div class="none">Nothing on it yet. Draw a block and press <b>keep</b>; the game deals it beside the generated hand, and <b>export</b> writes them all to a file every instrument in this project can read.</div>';
     return;
   }
   state.shelf.forEach((rec, i) => {
     const row = document.createElement('div');
     row.className = 'row2';
+    const d = describe(rec);
     const b = document.createElement('button');
     b.className = 'pick';
-    b.textContent = rec.slice(2, -6);
-    b.title = rec;
+    b.textContent = d ? d.name : rec;
+    b.title = d ? `${d.line}\n${rec}` : rec;
     b.onclick = () => { push(); adopt(rec); };
     const x = document.createElement('button');
     x.className = 'drop';
@@ -903,6 +916,32 @@ function shelf() {
   });
 }
 
+/* --------------------------------------------------------------- the files */
+
+$('#export').onclick = () => {
+  if (!state.shelf.length) return say('nothing on the shelf to export', true);
+  const f = blocksToFile(state.shelf, 'a shelf of blocks');
+  download(f);
+  say(`${f.name} — one recipe a line, drawable with blockshot --recipes @file`);
+};
+
+$('#import').onclick = async () => {
+  const picked = await pickFile();
+  if (!picked) return;
+  if (picked.error) return say(picked.error, true);
+  const got = readFile(picked.text);
+  if (got.kind === 'bad') return say(got.why, true);
+  if (got.kind === 'building') return say('that is a building, not blocks — open it in the game', true);
+  // MERGE, never replace. Importing a file should not be able to lose the
+  // shelf you already had, and a recipe IS the block so a repeat is not a
+  // duplicate — it is the one you already have.
+  let added = 0;
+  for (const r of got.recipes) if (!state.shelf.includes(r)) { state.shelf.push(r); added++; }
+  saveShelf();
+  say(`${added} new, ${got.recipes.length - added} already here`
+    + (got.bad.length ? ` · ${got.bad.length} this version cannot build: ${got.bad[0]}` : ''), !!got.bad.length);
+};
+
 /* ------------------------------------------------------------ the recipe -- */
 
 /** Every edit ends here: the recipe box, the thumbnails, the draft, the URL and
@@ -910,9 +949,12 @@ function shelf() {
 function changed(model = true) {
   const rec = encodeDrawn(state.drawing);
   $('#recipe').value = rec;
+  const d = describe(rec);
+  $('#blockname').textContent = d ? d.name : 'nothing drawn yet';
+  $('#blockname').title = d ? d.line : '';
   storeys();
   discs();
-  try { localStorage.setItem(DRAFT_KEY, rec); } catch { /* full */ }
+  store.put(KEYS.draft, rec);
   history.replaceState(null, '', '#' + rec);
   if (model) repaintModel();
 }
@@ -944,12 +986,10 @@ $('#recipe').addEventListener('change', (e) => {
 
 $('#tostack').onclick = () => {
   const rec = encodeDrawn(state.drawing);
-  const d = decodeDrawn(rec);
-  if (!d.ok) return say(d.why, true);
-  if (state.shelf.includes(rec)) return say('already on the shelf — a recipe IS the block');
-  state.shelf.push(rec);
-  saveShelf();
-  say(`on the shelf · ${state.shelf.length} drawn block${state.shelf.length > 1 ? 's' : ''} waiting in the game`);
+  const got = store.addBlock(rec);
+  loadShelf();
+  if (!got.ok) return say(got.why, true);
+  say(`kept as ${got.name} · ${got.count} block${got.count > 1 ? 's' : ''} on the shelf`);
 };
 
 $('#mat').onclick = () => {
@@ -982,7 +1022,7 @@ $('#clearall').onclick = () => {
 tools();
 setTool(state.tool);
 if (!adopt(decodeURIComponent(location.hash.slice(1)), true)) {
-  if (!adopt(localStorage.getItem(DRAFT_KEY) || '', true)) {
+  if (!adopt(store.get(KEYS.draft, '') || '', true)) {
     // A first block, so the board is never an empty promise — and it is the one
     // the whole family exists for: a solid ground floor with its arrises
     // rounded, a wall to lean on, a ramp climbing north across the first storey
