@@ -579,9 +579,17 @@ export function repairFlush(kit, sheets, opts = {}) {
 
   const roleFilter = (name) => (spec && spec.roles.find((r) => r.name === name) || {}).filter;
 
+  const setCap = opts.setCap ?? 3;
+
   for (let pass = 0; pass < (opts.maxSwaps || 24); pass++) {
     const inKit = new Set(kit.map((s) => s.recipe));
     const seqs = new Set(kit.map((s) => s.f.seq));
+    // THE DIVERSITY CAP IS THE SPEC'S OWN REJECT — "more than three blocks made
+    // of the same three plans in any order" — and `pickKit` is the only thing
+    // that had ever enforced it. A repair pass that quietly exceeded it would
+    // trade the property the kit exists for against the number it is optimising.
+    const sets = new Map();
+    for (const s of kit) if (s.f.set) sets.set(s.f.set, (sets.get(s.f.set) || 0) + 1);
     const have = fullyFlush(kit);
     const wasGround = grounded(kit);
 
@@ -616,7 +624,15 @@ export function repairFlush(kit, sheets, opts = {}) {
       // filter this pass would quietly refill the kit with whatever interlocks
       // best, which is a hundred copies of one idea — the thing `pickKit` exists
       // to prevent.
-      const flushable = sheets.filter((c) => !inKit.has(c.recipe) && !seqs.has(c.f.seq)
+      // …minus the outgoing block's own share, since it is on its way out. A
+      // first version subtracted nothing and so refused the near-miss swaps —
+      // the same three plans in a different arrangement — which are exactly the
+      // smallest useful ones.
+      const room = (c) => !c.f.set
+        || (sets.get(c.f.set) || 0) - (c.f.set === s.f.set ? 1 : 0) < setCap;
+      const flushable = sheets.filter((c) => !inKit.has(c.recipe)
+        && (!seqs.has(c.f.seq) || c.f.seq === s.f.seq)
+        && room(c)
         && wallsAnswered(c, answers) === 4
         && (!filter || matches(c, filter)));
       why.pool = flushable.length;
@@ -701,6 +717,12 @@ export function auditKit(kit) {
     roles: kit.reduce((t, s) => ((t[s.role] = (t[s.role] || 0) + 1), t), {}),
     anchors: kit.reduce((n, s) => n + s.anchors, 0),
     chambers: kit.filter((s) => s.chambers > 0).length,
+    // A STATED RULE THAT NOTHING MEASURED. The spec rejects "more than three
+    // blocks made of the same three plans in any order" and only `pickKit`
+    // enforced it — the three repair passes could all exceed it, and a rule
+    // nobody checks is a rule that is true until the day it is not.
+    overCap: [...kit.reduce((t, s) => (s.f && s.f.set ? t.set(s.f.set, (t.get(s.f.set) || 0) + 1) : t), new Map())]
+      .filter(([, n]) => n > 3),
     components: connectivity(kit),
     tests: buildTests(kit),
   };

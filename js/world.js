@@ -335,10 +335,21 @@ export class World {
       ? [c.x, c.y, c.z, idx(c.id), c.rot]
       : [c.x, c.y, c.z, idx(c.id)]));
     const anchors = [...this.anchors.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
-    // piranesi/4 — the anchor keys are GEOMETRY now, not an index into a
-    // generated list. See `anchors.js siteId`, and `reindex` for how a /3 file
-    // is brought across.
-    const out = { format: 'piranesi/4', palette, cells };
+    /**
+     * piranesi/4 — the anchor keys are GEOMETRY now, not an index into a
+     * generated list. See `anchors.js siteId`, and `reindex` for how a /3 file
+     * is brought across.
+     *
+     * AND THE MARKER TELLS THE TRUTH ABOUT THE FILE IT IS ON. If `reindex`
+     * refused — which it does when the sampler has moved, because a migration
+     * that silently walks every torch is worse than an index that fails visibly
+     * — then index keys are still in here, and stamping that /4 would be a lie
+     * with a consequence: a future reader would take the keys for geometry. It
+     * is a /3 file while it holds /3 keys, and a /3 file is one an older build
+     * can still read correctly.
+     */
+    const stale = anchors.some(([k]) => isIndexKey(k));
+    const out = { format: stale ? 'piranesi/3' : 'piranesi/4', palette, cells };
     if (anchors.length) out.anchors = anchors;
     return out;
   }

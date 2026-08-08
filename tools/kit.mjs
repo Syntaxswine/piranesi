@@ -126,7 +126,13 @@ for (const s of lifts) {
 // SAME-ROLE replacement that is flush on all four.  It goes last because a swap
 // that raised flushness while stranding an island or ungrounding a block would
 // be trading the number nobody looks at for the two that matter.
-const met = repairFlush(kit, sheets, { pin: PIN, spec, tries: Number(arg('--tries', '64')) });
+// Measured BEFORE the pass, so the report's own before-and-after is a
+// measurement rather than two numbers somebody typed in once.
+const pre = auditKit(kit);
+const BEFORE = { flush: pre.fullyFlush, patterns: pre.wallPatterns, mean: pre.meanKitFlush };
+const met = repairFlush(kit, sheets, {
+  pin: PIN, spec, setCap: Number(arg('--set-cap', '3')), tries: Number(arg('--tries', '64')),
+});
 for (const s of met) say(`  flush:  +${s.added}  −${s.dropped}  (${s.role}, ${s.flush})`);
 // NO SILENT CAPS. A pass that gives up quietly reads as "this is as good as it
 // gets"; these lines say which blocks are still short and what stopped each one.
@@ -167,6 +173,8 @@ p(`| joinery graph components | **${audit.components.count}** (largest ${audit.c
 p(`| distinct wall patterns in the kit | ${audit.wallPatterns} |`);
 p(`| anchor sites for chains and rings | ${audit.anchors} |`);
 p(`| blocks with a sealed chamber | ${audit.chambers} |`);
+p(`| plan-sets over the cap of three | ${audit.overCap.length}${audit.overCap.length
+  ? ` — ${audit.overCap.map(([k, n]) => `\`${k}\` ×${n}`).join(', ')}` : ''} |`);
 p('');
 p('One component means every block can be reached from every other by setting');
 p('blocks side by side. **Two would mean two cliques that cannot meet** — a kit');
@@ -186,12 +194,12 @@ if ((met.left || []).length) {
   p('### The blocks still short of four walls, and why');
   p('');
   p('BACKLOG 0p asked why 17 edge words instead of 15 took this from 96 of 100 to');
-  p('82. The answer is that the quotas were innocent: **the greedy pass maximises a');
+  p(`${BEFORE.flush}. The answer is that the quotas were innocent: **the greedy pass maximises a`);
   p('marginal gain and never goes back**, and whether a block\'s own walls end up');
   p('answered is a fact about the other ninety-nine that no per-candidate score can');
   p('see — the same shape of finding as connectivity and as the vertical. A third');
-  p('repair pass took it to');
-  p(`**${audit.fullyFlush}**. What is left is reported rather than rounded off:`);
+  p(`repair pass took it to **${audit.fullyFlush}**, and`);
+  p(`the mean from ${BEFORE.mean.toFixed(2)} to ${audit.meanKitFlush.toFixed(2)}. What is left is reported rather than rounded off:`);
   p('');
   p('| block | role | walls | what stopped it |');
   p('|---|---|---:|---|');
@@ -206,11 +214,14 @@ if ((met.left || []).length) {
   p('costume: a vault runs but it cannot land, so its spandrel wall is met by');
   p('almost nothing. A springer would close those four and nothing else will.');
   p('');
+  // COMPUTED, not typed. Two numbers here were written by hand for one run of
+  // the pass and were wrong by the next — which is the mistake `naming.js` and
+  // `plan.js` §MASS are both about, made in a document ABOUT that mistake.
   p('**And the cost, said out loud.** Every swap trades an odd wall for a common');
-  p(`one, so distinct wall patterns in the kit fell from 55 to ${audit.wallPatterns}: eight more`);
-  p('blocks fully flush, six fewer kinds of seam. That is the right trade for a kit');
-  p('whose job is to tile — but it is a trade, and a pass that reported only the');
-  p('number it was optimising would have hidden it.');
+  p(`one, so distinct wall patterns in the kit fell from ${BEFORE.patterns} to ${audit.wallPatterns}:`);
+  p(`${audit.fullyFlush - BEFORE.flush} more blocks fully flush, ${BEFORE.patterns - audit.wallPatterns} fewer kinds of seam. That is the right`);
+  p('trade for a kit whose job is to tile — but it is a trade, and a pass that');
+  p('reported only the number it was optimising would have hidden it.');
   p('');
 }
 
