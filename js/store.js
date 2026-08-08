@@ -54,10 +54,21 @@ export const FORMAT = 'piranesi/3';   // World.toJSON's own marker
 /* ------------------------------------------------------------- the store -- */
 
 export class Store {
-  /** @param backing anything with getItem/setItem/removeItem — the real
-   *   localStorage in a browser, a Map-backed shim in a test. */
-  constructor(backing = globalThis.localStorage) {
-    this.s = backing || memory();
+  /**
+   * @param backing anything with getItem/setItem/removeItem — the real
+   *   localStorage in a browser, a Map-backed shim in a test.
+   *
+   * NOT A DEFAULT PARAMETER. Reading `globalThis.localStorage` THROWS
+   * SecurityError in Chrome with third-party cookies blocked, and a default
+   * argument is evaluated before the body, so `|| memory()` on the next line
+   * would never run. That turns "nothing can be saved" into "nothing loads" —
+   * and the save system is the one component that has to survive hostile
+   * storage, because it is the one that tells you storage is hostile.
+   */
+  constructor(backing) {
+    let s = backing;
+    if (!s) { try { s = globalThis.localStorage; } catch { s = null; } }
+    this.s = s || memory();
     /** Every complaint since the last `drain()`. The pages show these; nothing
      *  in here ever throws at a caller who just wanted to save. */
     this.problems = [];
@@ -66,18 +77,54 @@ export class Store {
   say(msg) { this.problems.push(msg); return msg; }
   drain() { const p = this.problems; this.problems = []; return p; }
 
+  /**
+   * THE ONLY PLACE THIS MODULE TOUCHES A KEY, and it is wrapped.
+   *
+   * Reading `globalThis.localStorage` throws SecurityError in Chrome with
+   * third-party cookies blocked, and Safari in private mode throws on the
+   * CALLS too, not merely on the property. A save system is the one component
+   * that has to survive hostile storage, because it is the one that tells you
+   * storage is hostile — so every read goes through here and none of them can
+   * take the page down.
+   */
+  raw(key) { try { return this.s.getItem(key); } catch { return null; } }
+  has(key) { return this.raw(key) != null; }
+
   get(key, fallback = null) {
+    const raw = this.raw(key);
+    if (raw == null) return fallback;
     try {
-      const raw = this.s.getItem(key);
-      if (raw == null) return fallback;
       return JSON.parse(raw);
     } catch {
-      // A corrupt value is REPORTED and left alone. Deleting it would be the
-      // one irreversible thing this module could do, on the one occasion it has
-      // the least idea what is going on.
-      this.say(`${key} is unreadable and was left untouched`);
+      // QUARANTINE, THEN REPORT — and this is the fix for the worst bug this
+      // module ever had.
+      //
+      // It used to say "unreadable and was left untouched" and return the
+      // fallback. Which was true of the READER. But the caller then got an
+      // empty list, worked from it, and the next write put that empty list
+      // straight over the top: one click and every building was gone, with a
+      // reassuring message in the log saying nothing had been touched. The
+      // invariant the comment claimed was "a key that will not read is never
+      // written over"; the invariant the code had was "the reader does not
+      // delete it", and those differ by exactly the bug.
+      //
+      // So the raw text is copied somewhere safe FIRST. After that the write
+      // may proceed — refusing it would leave the player unable to save at all
+      // until they went into devtools, which is worse.
+      this.quarantine(key, raw);
       return fallback;
     }
+  }
+
+  /** Put the raw text of an unreadable value somewhere it cannot be trodden on.
+   *  Never overwrites an existing quarantine: the FIRST copy is the good one. */
+  quarantine(key, raw) {
+    const box = `${key}~broken`;
+    const already = this.raw(box);
+    if (already == null) {
+      try { this.s.setItem(box, raw); } catch { /* nothing more we can do */ }
+    }
+    this.say(`${key} would not read — the original is kept at "${box}"; export before you build on this`);
   }
 
   /**
@@ -113,7 +160,7 @@ export class Store {
     // shelf: `get` returns its fallback for both, so `?? migrate()` fired on a
     // corrupt shelf and MIGRATION OVERWROTE IT with an empty list. A value that
     // will not parse is left exactly where it is — see `get`.
-    const raw = this.s.getItem(KEYS.shelf) == null ? this.migrateShelf() : this.get(KEYS.shelf, null);
+    const raw = !this.has(KEYS.shelf) ? this.migrateShelf() : this.get(KEYS.shelf, null);
     if (!Array.isArray(raw)) return [];
     const ok = [], bad = [];
     for (const r of raw) (typeof r === 'string' && decode(r).ok ? ok : bad).push(r);
@@ -124,7 +171,7 @@ export class Store {
   /** Put a block on the shelf. A recipe IS the block, so adding one twice is
    *  not a duplicate — it is the same block, and it says so. */
   addBlock(recipe) {
-    const list = this.s.getItem(KEYS.shelf) == null
+    const list = !this.has(KEYS.shelf)
       ? (this.migrateShelf() || []) : (this.get(KEYS.shelf, null) || []);
     if (!decode(recipe).ok) return { ok: false, why: decode(recipe).why };
     if (list.includes(recipe)) return { ok: false, why: 'already on the shelf — a recipe IS the block' };
@@ -141,13 +188,54 @@ export class Store {
     return this.put(KEYS.shelf, list);
   }
 
-  setBlocks(list) { return this.put(KEYS.shelf, list); }
+  /**
+   * WRITE THE SHELF WITHOUT DELETING WHAT YOU CANNOT SEE.
+   *
+   * `blocks()` filters out recipes this version cannot build and says they are
+   * "left in storage in case a later version can build it again" — and then
+   * `draw.js` did `state.shelf = store.blocks()` and wrote that filtered list
+   * straight back. Every drawing made before the slice-plane ladder changed
+   * would have been deleted by the first time anything touched the shelf, and
+   * `draw.html` is the only place a `D:` recipe originates, so that shelf entry
+   * is the last copy. The function that filters and the function that writes
+   * have to agree about what the shelf IS.
+   */
+  setBlocks(list) {
+    const stored = !this.has(KEYS.shelf) ? [] : (this.get(KEYS.shelf, []) || []);
+    const keeping = new Set(list);
+    const unbuildable = stored.filter((r) => typeof r === 'string' && !decode(r).ok && !keeping.has(r));
+    if (unbuildable.length) {
+      this.say(`${unbuildable.length} block(s) this version cannot build are still on the shelf, untouched`);
+    }
+    return this.put(KEYS.shelf, [...list, ...unbuildable]);
+  }
+
+  /* ------------------------------------------------------------- the draft */
+
+  /**
+   * The board's working drawing, stored BARE rather than as JSON — because it
+   * always was, and because a recipe validates itself so there is nothing a
+   * wrapper would add.
+   *
+   * Going through `put` would have JSON-quoted it, and then the next boot's
+   * `JSON.parse` on the un-quoted legacy value would have thrown, quarantined
+   * it and started from the default: everybody's in-progress drawing lost, once,
+   * silently, on the upgrade.
+   */
+  draft() { return this.raw(KEYS.draft) || ''; }
+  setDraft(recipe) {
+    try { this.s.setItem(KEYS.draft, String(recipe)); return true; } catch (err) {
+      this.say(`could not keep the drawing: ${err && err.name === 'QuotaExceededError'
+        ? 'this browser is out of storage' : String(err)}`);
+      return false;
+    }
+  }
 
   /* --------------------------------------------------------- the buildings */
 
   buildings() {
     // Absent vs unreadable, as in `blocks()` — a corrupt list is never replaced.
-    const raw = this.s.getItem(KEYS.buildings) == null
+    const raw = !this.has(KEYS.buildings)
       ? this.migrateBuildings() : this.get(KEYS.buildings, null);
     return Array.isArray(raw) ? raw : [];
   }
@@ -210,8 +298,11 @@ export class Store {
     // The old single save, plus any `?slot=` saves — the slot mechanism was the
     // only way to have two buildings, and it was a URL parameter nobody could
     // discover.
-    for (let i = 0; i < (this.s.length || 0); i++) {
-      const k = this.s.key ? this.s.key(i) : null;
+    let n = 0;
+    try { n = this.s.length || 0; } catch { n = 0; }
+    for (let i = 0; i < n; i++) {
+      let k = null;
+      try { k = this.s.key ? this.s.key(i) : null; } catch { k = null; }
       if (!k || !k.startsWith(OLD.save)) continue;
       const world = this.get(k, null);
       if (!world || !world.cells) continue;
@@ -296,9 +387,33 @@ export function readFile(text) {
   if (trimmed.startsWith('{')) {
     let data;
     try { data = JSON.parse(trimmed); } catch (err) { return { kind: 'bad', why: `that file is not readable JSON (${err.message})` }; }
-    if (Array.isArray(data.cells) && Array.isArray(data.palette)) return { kind: 'building', world: data };
-    if (Array.isArray(data.cells)) return { kind: 'building', world: data, note: 'an older save with no palette' };
-    return { kind: 'bad', why: 'that JSON is not a Piranesi building — no cells in it' };
+    if (!Array.isArray(data.cells)) return { kind: 'bad', why: 'that JSON is not a Piranesi building — no cells in it' };
+
+    // THE FORMAT MARKER IS READ. It was written on every save since
+    // `piranesi/3` and looked at by nothing, so a file from a later version
+    // would be parsed by this one's reader, quietly, and written back
+    // downgraded. Refusing a newer major is the whole reason to stamp a file.
+    const gen = Number(String(data.format || '').split('/')[1]);
+    if (Number.isFinite(gen) && gen > 3) {
+      return { kind: 'bad', why: `that file is ${data.format} and this build reads ${FORMAT} — it needs a newer Piranesi` };
+    }
+
+    // AND THE ROWS ARE CHECKED, not just the array. `World.fromJSON`
+    // destructures every cell (`for (const [x,y,z,ref,rot] of data.cells`), so
+    // one non-iterable row throws a TypeError — and the game SAVES an imported
+    // building before it opens it, so the throw came back on every subsequent
+    // boot with no UI left to undo it. A bad file bricked the page for good.
+    for (let i = 0; i < data.cells.length; i++) {
+      const c = data.cells[i];
+      if (!Array.isArray(c) || c.length < 4 || c.slice(0, 4).some((n) => !Number.isFinite(n))) {
+        return { kind: 'bad', why: `that file's cell ${i} is not [x,y,z,block] — it is ${JSON.stringify(c)}` };
+      }
+    }
+    if (data.palette && !data.palette.every((r) => typeof r === 'string')) {
+      return { kind: 'bad', why: "that file's palette is not a list of recipes" };
+    }
+    if (!Array.isArray(data.palette)) return { kind: 'building', world: data, note: 'an older save with no palette' };
+    return { kind: 'building', world: data };
   }
   const { recipes, bad } = shelfFromText(s);
   // NO GOOD RECIPES IS A BAD FILE, not an import of nothing. `hello world` is

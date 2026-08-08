@@ -261,6 +261,28 @@
 > plural, the cheap version is a "revert to last saved" rather than a real undo
 > stack.
 >
+> **0u (NEW). Two tabs on the same building overwrite each other.** Both open
+> `store.openName()` by default, each holds its own in-memory World, and the
+> autosave fires on every placement — so a stray click in a stale tab writes its
+> old world over an hour of building. The cheap fix is a token in the record: on
+> save, refuse if the stored one is not the token this tab last wrote, and offer
+> "save as" instead. Reproduced.
+>
+> **0v (NEW). The library is one key, so quota failure is collection-wide.**
+> `setItem` must fit the whole array every time; once it does not, nothing can
+> be saved, including a brand-new one-block building. Per-building keys fix this
+> AND shrink 0's blast radius from the library to one building. Two of the three
+> designs called for it.
+>
+> **0w (NEW). Anchors are keyed by an index into a generated list.**
+> `anchors.js:59` — `${layer}|${x},${y},${z}#${i}`, where `i` indexes a seeded
+> shuffle. Retune the sampler and every saved torch moves to a different
+> bracket, silently: **the exact bug `recipe.js` was written to kill, one level
+> down**, and now that saves are exportable it travels. But note the trap in
+> fixing it: a migration that rewrites saved keys to geometry is exact only
+> while the current sampler agrees with the old one, and a migration that
+> silently moves every torch is worse than an index that fails visibly.
+>
 > **0t (NEW). A building's view is stored but not exported.** Deliberate — you
 > send somebody a building, not your camera — but it means an imported building
 > opens at the default view, which is disorienting for a big one. A `--eye` hint

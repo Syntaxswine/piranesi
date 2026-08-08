@@ -331,6 +331,18 @@ export class World {
     const pal = data.palette || null;
     if (!pal) w.legacy = true;
 
+    /**
+     * BLOCKS THAT LANDED ON TOP OF EACH OTHER.
+     *
+     * `place` clears whatever it overlaps, by design — a builder that refuses
+     * is a builder you fight. But on LOAD that turns a file with two blocks in
+     * one cell into a file with one, silently, and the survivor is decided by
+     * file order rather than by anything the player did. Round-tripping a save
+     * this game wrote is safe, because `toJSON` cannot emit an overlap;
+     * importing one that was hand-edited or merged is not. So it is counted,
+     * and the caller says so.
+     */
+    w.displaced = [];
     for (const [x, y, z, ref, rot] of data.cells || []) {
       const id = pal ? pal[ref] : ref;
       if (id == null) continue;
@@ -339,7 +351,8 @@ export class World {
         if (!def) { if (!w.missing.includes(id)) w.missing.push(id); continue; }
         catalog.set(id, def);
       }
-      w.place(x, y, z, id, rot || 0);
+      const gone = w.place(x, y, z, id, rot || 0);
+      for (const b of gone) w.displaced.push(b);
     }
     // AFTER the blocks, always: `place` calls `forgetAnchorsAt`, so loading the
     // choices first would have the building erase them as it went up.

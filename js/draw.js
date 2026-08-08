@@ -38,7 +38,7 @@ import {
 } from './drawn.js';
 import { SUB, R, R_WHOLE } from './cube.js';
 import { blockFromRecipe } from './stack.js';
-import { Store, KEYS, blocksToFile, readFile } from './store.js';
+import { Store, blocksToFile, readFile } from './store.js';
 import { download, pickFile } from './files.js';
 import { describe } from './naming.js';
 import { World } from './world.js';
@@ -954,7 +954,7 @@ function changed(model = true) {
   $('#blockname').title = d ? d.line : '';
   storeys();
   discs();
-  store.put(KEYS.draft, rec);
+  store.setDraft(rec);
   history.replaceState(null, '', '#' + rec);
   if (model) repaintModel();
 }
@@ -1021,8 +1021,20 @@ $('#clearall').onclick = () => {
 
 tools();
 setTool(state.tool);
-if (!adopt(decodeURIComponent(location.hash.slice(1)), true)) {
-  if (!adopt(store.get(KEYS.draft, '') || '', true)) {
+/**
+ * THE FRAGMENT IS THE SHARE CHANNEL, so it is the one input that arrives
+ * hand-edited. `decodeURIComponent('%')` throws `URIError: URI malformed`, and
+ * this runs at module top level — so a link ending in a stray percent sign
+ * aborted the rest of boot and the player got a BLANK PAGE. Not a bad drawing,
+ * not the default: nothing at all, with the shelf, the layer and the board all
+ * un-initialised behind it.
+ */
+function fromHash() {
+  try { return decodeURIComponent(location.hash.slice(1)); } catch { return ''; }
+}
+
+if (!adopt(fromHash(), true)) {
+  if (!adopt(store.draft(), true)) {
     // A first block, so the board is never an empty promise — and it is the one
     // the whole family exists for: a solid ground floor with its arrises
     // rounded, a wall to lean on, a ramp climbing north across the first storey

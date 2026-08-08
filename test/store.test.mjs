@@ -103,13 +103,77 @@ test('a write that fails says so, and the caller can tell', () => {
   assert.match(store.drain().join(' '), /out of storage/);
 });
 
-test('storage that will not parse is reported and LEFT ALONE', () => {
-  const s = fakeStorage({ [KEYS.shelf]: '{not json' });
+test('storage that will not parse is QUARANTINED before anything writes over it', () => {
+  // THIS TEST USED TO ASSERT THE WRONG INVARIANT AND PASS.
+  //
+  // It seeded a corrupt value, called the reader, and checked the raw string
+  // was unchanged — "deleting it would be the one irreversible thing this
+  // module could do". True, and useless: the reader was never the thing that
+  // deleted it. The reader returned an empty list, the caller worked from that,
+  // and THE NEXT WRITE put the empty list over the top. One click and every
+  // building was gone, with a message in the log saying nothing had been
+  // touched.
+  //
+  // The invariant the code claimed was "a key that will not read is never
+  // written over". The invariant it tested was "the reader does not delete it".
+  // They differ by exactly the bug, so the test now writes afterwards.
+  const s = fakeStorage({ [KEYS.buildings]: '{not json' });
   const store = new Store(s);
-  assert.deepEqual(store.blocks(), []);
-  assert.match(store.drain().join(' '), /unreadable/);
-  assert.equal(s.getItem(KEYS.shelf), '{not json',
-    'deleting it would be the one irreversible thing this module could do');
+  assert.deepEqual(store.buildings(), []);
+  assert.match(store.drain().join(' '), /would not read/);
+
+  store.saveBuilding('anything', { format: 'piranesi/3', palette: [], cells: [] });
+  assert.equal(s.getItem(`${KEYS.buildings}~broken`), '{not json',
+    'the original text must survive the write that follows the failed read');
+
+  // And a second failure does not overwrite the first copy — the FIRST one is
+  // the good one, and by the second the damage has already been done once.
+  const store2 = new Store(s);
+  s.setItem(KEYS.buildings, '{different rubbish');
+  store2.buildings();
+  assert.equal(s.getItem(`${KEYS.buildings}~broken`), '{not json');
+});
+
+test('the shelf keeps what it cannot build, even across a write', () => {
+  // `blocks()` filters out unbuildable recipes and its comment promises they
+  // are "left in storage in case a later version can build it again" — and
+  // then `draw.js` did `state.shelf = store.blocks()` and wrote that filtered
+  // list straight back. `draw.html` is the only place a `D:` recipe comes from,
+  // so that entry is the LAST COPY of a drawn block. The function that filters
+  // and the function that writes have to agree about what the shelf is.
+  const s = fakeStorage({ [KEYS.shelf]: JSON.stringify(['S:full,full,full:stone', OLD_LADDER]) });
+  const store = new Store(s);
+  const working = store.blocks();
+  store.drain();
+  assert.deepEqual(working, ['S:full,full,full:stone']);
+
+  store.setBlocks(working);                      // the round trip draw.js makes
+  assert.ok(JSON.parse(s.getItem(KEYS.shelf)).includes(OLD_LADDER),
+    'a recipe this version cannot build survived being saved over');
+  assert.match(store.drain().join(' '), /still on the shelf, untouched/);
+});
+
+test('the draft is stored bare, so the upgrade does not eat an in-progress drawing', () => {
+  // Going through `put` would JSON-quote it, and then the next boot's parse of
+  // the un-quoted legacy value would throw, quarantine it and start from the
+  // default: everybody's unfinished drawing lost, once, on the upgrade.
+  const s = fakeStorage({ [KEYS.draft]: 'D:00ii,00ii,00ii:stone' });
+  const store = new Store(s);
+  assert.equal(store.draft(), 'D:00ii,00ii,00ii:stone', 'a bare legacy value reads back as itself');
+  store.setDraft('D:0cii,0cii,0cii:stone');
+  assert.equal(s.getItem(KEYS.draft), 'D:0cii,0cii,0cii:stone', 'and is written back bare');
+});
+
+test('a Store constructs where the browser refuses storage outright', () => {
+  // Accessing `globalThis.localStorage` THROWS SecurityError in Chrome with
+  // third-party cookies blocked. A default parameter is evaluated before the
+  // body, so `|| memory()` never ran and the throw took the whole page with it:
+  // "nothing can be saved" became "nothing loads".
+  const hostile = { get getItem() { throw new Error('SecurityError'); } };
+  const store = new Store(hostile);
+  assert.doesNotThrow(() => store.blocks(), 'a hostile backing must not take the page down');
+  assert.doesNotThrow(() => store.buildings());
+  assert.equal(store.draft(), '');
 });
 
 /* ------------------------------------------------------------ the buildings */
@@ -223,6 +287,41 @@ test('a file is sniffed, and something that is neither says so', () => {
   const old = readFile(`# a shelf from before the radius changed\n${OLD_LADDER}\n`);
   assert.equal(old.kind, 'bad');
   assert.match(old.why, /this version can build/);
+});
+
+test('a building file is refused before it can reach the loader', () => {
+  // `World.fromJSON` destructures every cell, so ONE non-iterable row throws a
+  // TypeError — and the game used to write an imported building to storage
+  // before opening it, so the throw came back on every subsequent boot with no
+  // UI left to remove it. One bad file bricked the page for good. The rows are
+  // checked here, before anything is kept.
+  for (const [json, why] of [
+    ['{"format":"piranesi/9","palette":[],"cells":[]}', /needs a newer Piranesi/],
+    ['{"palette":[],"cells":[{"x":1}]}', /cell 0 is not \[x,y,z,block\]/],
+    ['{"palette":[],"cells":[[0,0,0]]}', /cell 0 is not/],
+    ['{"palette":[],"cells":[["a",0,0,0]]}', /cell 0 is not/],
+    ['{"palette":[1,2],"cells":[[0,0,0,0]]}', /palette is not a list of recipes/],
+  ]) {
+    const got = readFile(json);
+    assert.equal(got.kind, 'bad', `${json} must be refused`);
+    assert.match(got.why, why);
+  }
+  // …and the same version check does NOT refuse the format we write.
+  assert.equal(readFile('{"format":"piranesi/3","palette":[],"cells":[]}').kind, 'building');
+});
+
+test('loading a building with two blocks in one cell says which it lost', () => {
+  // Cells are written sorted so the game's own writer cannot emit an overlap;
+  // this only bites on a file that was hand-edited, merged, or made by a tool.
+  // `place` clears what it overlaps by design, so without a count the block
+  // just vanishes — no entry in `missing`, no warning, nothing.
+  const cat = buildCatalog(4, 1);
+  const id = [...cat.keys()][0];
+  const w = World.fromJSON(cat, {
+    format: 'piranesi/3', palette: [id], cells: [[0, 0, 0, 0], [0, 0, 0, 0]],
+  }, (r) => blockFromRecipe(r));
+  assert.equal(w.size, 1, 'the later one won, as `place` always does');
+  assert.equal(w.displaced.length, 1, 'and the loader counted the one it lost');
 });
 
 test('slug never produces an empty or unsafe filename', () => {

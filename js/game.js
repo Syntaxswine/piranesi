@@ -88,6 +88,8 @@ const state = {
   sites: [],
   sitesAt: -1,
   picking: null,                     // the site whose menu is open
+  /** How many blocks the open building lost on load. Non-zero blocks the save. */
+  lossy: 0,
   /** The name of the building being worked on. The autosave writes into it. */
   open: '',
 };
@@ -581,7 +583,7 @@ function hud() {
     (state.hover ? ` · at ${state.hover[0]},${state.hover[1]}` : '') +
     (s ? ` · ${s.visible} faces${s.ghosted ? ` (${s.ghosted} ghosted)` : ''}` +
       ` · ${s.hatchLines} strokes · ${s.ms.total.toFixed(0)} ms` : '') +
-    (noted ? `\n${noted}` : '');
+    (noted.length ? `\n${noted.join('\n')}` : '');
 }
 
 /* ---------------------------------------------------------------- the save */
@@ -597,10 +599,24 @@ function hud() {
  * reported now, in the HUD, where you are looking.
  */
 function save() {
+  // A BUILDING THAT LOADED SHORT MUST NOT BE SAVED SHORT.
+  //
+  // `fromJSON` drops cells whose recipes this version cannot build, and the
+  // palette is the ONE artefact that survives a grammar change — so writing the
+  // world back would rebuild the palette from what SURVIVED and delete the
+  // recipes for everything that did not. One click after opening a building
+  // drawn before the slice-plane ladder changed and the evidence is gone,
+  // permanently, and the file looks healthy ever after.
+  if (state.lossy) {
+    note(`"${state.open}" is missing ${state.lossy} block(s) this version cannot build — `
+      + 'not saving over it. Use "save as" to keep this state under a new name.');
+    return;
+  }
   const view = { centre: state.centre.slice(), layer: state.layer, yaw: state.yaw, zoom: state.zoom };
   if (!store.saveBuilding(state.open, state.world.toJSON(), view)) {
     for (const p of store.drain()) note(p);
   }
+  for (const p of store.drain()) note(p);
   buildings();
 }
 
@@ -611,9 +627,13 @@ function openBuilding(name) {
   const rec = store.building(name);
   if (!rec) return false;
   const w = World.fromJSON(catalog, rec.world, (r) => blockFromRecipe(r));
-  if (w.missing && w.missing.length) {
-    note(`${w.missing.length} block(s) in "${name}" cannot be built by this version`);
+  state.lossy = (w.missing && w.missing.length) || 0;
+  if (state.lossy) {
+    note(`${w.missing.length} block(s) in "${name}" cannot be built by this version — it will not be saved over`);
     console.warn('piranesi: cannot build:', w.missing);
+  }
+  if (w.displaced && w.displaced.length) {
+    note(`${w.displaced.length} block(s) in "${name}" were on top of each other; the later one won`);
   }
   state.world = w;
   state.open = name;
@@ -691,9 +711,21 @@ function buildings() {
   }
 }
 
-/** A line in the HUD that survives the next stats update. */
-let noted = '';
-function note(msg) { noted = msg; hud(); }
+/**
+ * THE HUD'S MESSAGE LINE, and it is a QUEUE.
+ *
+ * It was one slot, and the drawer row handler is
+ * `openBuilding(name); note('opened "x"')` — so a building that loaded short
+ * reported the loss and then immediately overwrote its own damage report with
+ * "opened". Every way of losing work here ends in "and then it was saved over",
+ * and every one of those depends on the player not having been told.
+ */
+const noted = [];
+function note(msg) {
+  if (msg && noted[noted.length - 1] !== msg) noted.push(msg);
+  while (noted.length > 3) noted.shift();
+  hud();
+}
 
 /* ----------------------------------------------------------------- go ----- */
 
@@ -712,7 +744,10 @@ $('#saveas').onclick = () => {
   const name = want.trim() || suggestName();
   if (store.building(name) && name !== state.open
     && !confirm(`"${name}" already exists. Overwrite it?`)) return;
+  // Save-as is the escape hatch from a lossy load: you are deliberately keeping
+  // THIS state, blocks-that-would-not-build and all, under a name of your own.
   state.open = name;
+  state.lossy = 0;
   save();
   note(`saved as "${name}"`);
 };
@@ -723,6 +758,7 @@ $('#newb').onclick = () => {
   state.world = new World(catalog);
   state.world.place(0, 0, 0, ids[0]);
   state.open = uniqueName('untitled');
+  state.lossy = 0;
   save();
   note(`started "${state.open}"`);
   invalidate(0);
@@ -749,11 +785,24 @@ $('#importb').onclick = async () => {
     shelf();
     return note(`${n} block(s) added to the shelf${got.bad.length ? ` · ${got.bad.length} unbuildable` : ''}`);
   }
+  // SAVED ONLY ONCE IT HAS OPENED. Writing first meant a file the loader chokes
+  // on was already in storage, so it came back on every subsequent boot with no
+  // UI left to remove it — one bad import bricked the page for good.
   const name = uniqueName(picked.name.replace(/\.json$/i, '') || 'imported');
+  let w;
+  try {
+    w = World.fromJSON(catalog, got.world, (r) => blockFromRecipe(r));
+  } catch (err) {
+    return note(`that file will not load: ${err.message}`);
+  }
+  state.world = w;
   state.open = name;
+  state.lossy = (w.missing && w.missing.length) || 0;
   store.saveBuilding(name, got.world);
-  if (!openBuilding(name)) return note('that building would not open');
-  note(`opened "${name}"`);
+  ids.length = 0; ids.push(...catalog.keys());
+  shelf(); buildings(); invalidate(0);
+  note(`opened "${name}" — ${w.size} block(s)`
+    + (state.lossy ? ` · ${state.lossy} this version cannot build` : ''));
 };
 
 /**
@@ -769,8 +818,11 @@ addEventListener('storage', (e) => {
   const before = catalog.size;
   drawnShelf(catalog);
   if (catalog.size !== before) {
-    ids.length = 0;
-    ids.push(...catalog.keys());
+    // APPENDED, never renumbered. `ids` is the number-key hand; rebuilding it
+    // would silently change which block `3` places, mid-session, in a building
+    // that is autosaving. Identity, never an index — the project's own law,
+    // and the sync path was the one place the save feature broke it.
+    for (const k of catalog.keys()) if (!ids.includes(k)) ids.push(k);
     shelf();
     note(`${catalog.size - before} block(s) arrived from the drawing board`);
   }
@@ -778,7 +830,6 @@ addEventListener('storage', (e) => {
 
 /* ----------------------------------------------------------------- go ----- */
 
-shelf();
 {
   // Open the building that was open last, or the one named by `?slot=`, or the
   // first there is — and only make a new one if there is genuinely nothing.
@@ -789,6 +840,15 @@ shelf();
     state.world.place(0, 0, 0, ids[0]);         // never an empty promise
     state.open = uniqueName('untitled');
   }
+  // THE SHELF IS BUILT AFTER THE BUILDING, and the order is the point. Opening
+  // a building REGISTERS any recipe the catalogue lacks — that is what makes a
+  // save self-contained — so a shelf rendered first would not list them. You
+  // could see a block in your own building and have nothing to click to place
+  // another one. Same reason `ids` is filled from the catalogue down here.
+  ids.length = 0;
+  ids.push(...catalog.keys());
+  state.pick = state.pick && catalog.has(state.pick) ? state.pick : ids[0];
+  shelf();
   buildings();
 }
 setMode(BUILD);
