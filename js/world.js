@@ -82,6 +82,31 @@ export const STRUCTURE = 'structure';
 export const FITTING = 'fitting';
 const anchorKey = (layer, x, y, z) => `${layer}|${x},${y},${z}`;
 
+/**
+ * THE NAME OF ONE ANCHOR SITE, and the `#` half of it is the whole of BACKLOG
+ * 0w.
+ *
+ * It used to be `structure|0,0,0#2` — where 2 indexes a SEEDED SHUFFLE inside
+ * `stack.js anchorsFor`. Position is an identity and a recipe is an identity;
+ * a position in a generated list is not. Retune the sampler by a hair and every
+ * torch in every save is on a different bracket, silently, with no error
+ * anywhere: the exact bug `recipe.js` was written to kill, one level down, and
+ * once saves became exportable it travelled with them.
+ *
+ * Now the tail is WHERE THE THING IS — the face and the two coordinates on it,
+ * in the block's own frame, which is what the site has always actually been.
+ * Retuning the sampler now does the only correct thing: a site that still exists
+ * keeps its torch, a site that has gone loses it, and a new one comes up unset.
+ *
+ * The separator stays `#` so `forgetAnchorsAt` needs no change, and so an old
+ * key is told from a new one by nothing more than whether the tail is a number.
+ */
+export const anchorSite = (layer, x, y, z, a) =>
+  `${layer || STRUCTURE}|${x},${y},${z}#${a.side}@${a.u},${a.z}`;
+
+/** True for a pre-`piranesi/4` key — the tail is a bare index. */
+export const isIndexKey = (id) => /#\d+$/.test(String(id));
+
 /** The footprint of a block as placed: odd quarter-turns swap x and y. */
 export function placedSize(def, rot) {
   const [sx, sy, sz] = def.size || [1, 1, 1];
@@ -310,7 +335,10 @@ export class World {
       ? [c.x, c.y, c.z, idx(c.id), c.rot]
       : [c.x, c.y, c.z, idx(c.id)]));
     const anchors = [...this.anchors.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
-    const out = { format: 'piranesi/3', palette, cells };
+    // piranesi/4 — the anchor keys are GEOMETRY now, not an index into a
+    // generated list. See `anchors.js siteId`, and `reindex` for how a /3 file
+    // is brought across.
+    const out = { format: 'piranesi/4', palette, cells };
     if (anchors.length) out.anchors = anchors;
     return out;
   }
@@ -356,7 +384,16 @@ export class World {
     }
     // AFTER the blocks, always: `place` calls `forgetAnchorsAt`, so loading the
     // choices first would have the building erase them as it went up.
-    for (const [id, kind] of data.anchors || []) w.anchors.set(id, kind);
+    //
+    // AN INDEX-KEYED CHOICE IS FLAGGED, NOT REPAIRED HERE. A /3 file names a
+    // site by its position in a generated list, and turning that back into a
+    // place needs the block definitions — which is `anchors.js`'s business, not
+    // the lattice's. `survey` does it at the one choke point nobody can forget.
+    w.indexed = 0;
+    for (const [id, kind] of data.anchors || []) {
+      w.anchors.set(id, kind);
+      if (isIndexKey(id)) w.indexed++;
+    }
     return w;
   }
 }

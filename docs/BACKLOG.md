@@ -261,42 +261,65 @@
 > plural, the cheap version is a "revert to last saved" rather than a real undo
 > stack.
 >
-> **0u, 0v and 0w are the NEXT ROUND — see `HANDOFF-2026-08-08.md`, which ranks
-> them and gives the cheapest fix for each. They are the three known ways the
-> save system can still lose somebody's work.**
+> ### ✅ Updated 2026-08-08 (later) — THE THREE WAYS ARE CLOSED
 >
-> **0x (NEW). Nothing tells an older copy of a building from a newer one.** No
-> timestamp, no content identity. Export, keep building, re-import the older
-> file and you get a second entry with no way to know which is which — a library
-> of similar buildings is hazardous to prune. The cells are already sorted, so a
-> content hash is nearly free.
+> `HANDOFF-2026-08-08.md` ranked three known ways the save system could still
+> lose work. All three are fixed, each with a test that performs the whole
+> sequence a player performs rather than the one step before the bug.
 >
-> **0u (NEW). Two tabs on the same building overwrite each other.** Both open
-> `store.openName()` by default, each holds its own in-memory World, and the
-> autosave fires on every placement — so a stray click in a stale tab writes its
-> old world over an hour of building. The cheap fix is a token in the record: on
-> save, refuse if the stored one is not the token this tab last wrote, and offer
-> "save as" instead. Reproduced.
+> ~~**0u. Two tabs on the same building overwrite each other.**~~ — **DONE.** A
+> token in the record, and **the token names the WRITE, not the tab** — the first
+> attempt keyed it to the session, so a tab's own second save carried the same
+> token as its first and the other tab still matched. It refused about half the
+> time and looked like it worked; the test caught it. `storage` also fires the
+> warning in the losing tab *immediately* rather than at its next click. Three
+> ways out, all tested: `save as`, `revert`, and an explicit take-over.
+> Two more paths fell out of it, both created BY the fix: once saving can refuse,
+> every "open something else" throws away an hour — so `new`, `clear` and the
+> buildings list all ask first (`okToLeave`). And **reading is not holding**: if
+> drawing the list counted as opening every building in it, the guard would pass
+> for one this tab had never had on screen.
 >
-> **0v (NEW). The library is one key, so quota failure is collection-wide.**
-> `setItem` must fit the whole array every time; once it does not, nothing can
-> be saved, including a brand-new one-block building. Per-building keys fix this
-> AND shrink 0's blast radius from the library to one building. Two of the three
-> designs called for it.
+> ~~**0v. The library is one key.**~~ — **DONE.** `piranesi/building/<slug>` plus
+> an index of names. The slug is minted once and a rename does not move it — a
+> rename that moved the key would be a copy and a delete. **The index is a
+> convenience and never the authority**: lose it and `strays()` rebuilds it from
+> the keys themselves. Migration is all-or-nothing on the index key, so a quota
+> failure part way leaves the old value untouched and retries next boot.
 >
-> **0w (NEW). Anchors are keyed by an index into a generated list.**
-> `anchors.js:59` — `${layer}|${x},${y},${z}#${i}`, where `i` indexes a seeded
-> shuffle. Retune the sampler and every saved torch moves to a different
-> bracket, silently: **the exact bug `recipe.js` was written to kill, one level
-> down**, and now that saves are exportable it travels. But note the trap in
-> fixing it: a migration that rewrites saved keys to geometry is exact only
-> while the current sampler agrees with the old one, and a migration that
-> silently moves every torch is worse than an index that fails visibly.
+> ~~**0w. Anchors keyed by an index into a generated list.**~~ — **DONE, and the
+> trap was respected.** The key is geometry now: `…#+x@4.5,1.6`. A `piranesi/3`
+> file is brought across at `survey` — the one choke point every path that can
+> SEE an anchor goes through — and **gated on a pinned stamp of the sampler's
+> actual output** (`stack.js SAMPLER`). Change `anchorsFor` and the test fails
+> with a note saying what it means; the migration then refuses and old keys stay
+> put, because a migration that silently moves every torch is worse than an index
+> that fails visibly. The corpus the handoff asked for exists:
+> `docs/sample-anchors.json`, a /3 file with six index-keyed choices, drawn by CI.
+> Format bumped to `piranesi/4`, so an older build refuses a /4 file rather than
+> reading it with all the torches missing.
 >
-> **0t (NEW). A building's view is stored but not exported.** Deliberate — you
-> send somebody a building, not your camera — but it means an imported building
-> opens at the default view, which is disorienting for a big one. A `--eye` hint
-> in the file, ignored by `World.fromJSON`, would fix it for `plateshot` too.
+> ~~**0x. Nothing tells an older copy of a building from a newer one.**~~ —
+> **DONE.** Every record carries `at` and a 64-bit content hash of its own
+> canonical text; the list shows the time and the tooltip shows the hash, and an
+> import that matches an existing hash offers to open that one instead. An
+> identical save is not a write at all, so the clock cannot lie.
+>
+> ~~**0s. There is no undo in the game.**~~ — **DONE.** `revert` — put back what
+> is on disk. It is also the way out of a two-tab conflict, which is why it
+> landed here rather than later.
+>
+> ~~**0t. A building's view is stored but not exported.**~~ — **DONE.** A `view`
+> hint, written last and outside the world proper so `hashOf` cannot see it, read
+> by the importer and by `plateshot --load` (which converts it the same way
+> pressing Tab does). `World.fromJSON` still ignores it: you send somebody a
+> building, not your camera.
+>
+> Two things found in passing and fixed: **`plateshot --load` drew the masonry
+> and silently left off every fitting** — the one instrument that photographs a
+> save was photographing a different building from the one in the file — and
+> `readFile` now carries the view out separately rather than letting it into the
+> world.
 
 Ranked by how much Carceri each buys. Sources are five research briefs
 (etching craft, a census of the sixteen plates, the spatial scholarship, the NPR

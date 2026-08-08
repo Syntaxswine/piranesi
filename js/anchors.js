@@ -38,8 +38,8 @@
 
 import { Mesh, box, sweep, arc, lathe, translate } from './mesh.js';
 import { SUB, FOOT, SECONDARY } from './cube.js';
-import { pointOf, normalOf } from './stack.js';
-import { key as cellKey, q4, turnSide } from './world.js';
+import { pointOf, normalOf, samplerStamp, SAMPLER } from './stack.js';
+import { key as cellKey, q4, turnSide, anchorSite, isIndexKey } from './world.js';
 
 const S = SUB;
 
@@ -53,10 +53,19 @@ export const KIND_IDS = KINDS.map((k) => k.id);
 
 /* ------------------------------------------------------------ addressing -- */
 
-/** A stable name for one site: the block it belongs to and which of its own
- *  sites this is.  Survives a save, a reload and a block being turned, because
- *  none of those changes a block's position or the order of its own list. */
-export const siteId = (b, i) => `${b.layer || 'structure'}|${b.x},${b.y},${b.z}#${i}`;
+/**
+ * A stable name for one site: the block it belongs to, and WHERE ON IT.
+ *
+ * It used to be the site's index in the block's own list, which survives a save,
+ * a reload and a quarter-turn — and not the one thing that actually moves. See
+ * `world.js anchorSite`: the list is dealt by a seeded shuffle, so its indices
+ * are positions in a generated thing and this project has a law about those.
+ *
+ * The declaration is in the block's LOCAL frame, before the placement turn, so a
+ * turned block's torches stay on the wall they were bolted to. (`siteWorld`
+ * turns the point and the normal; it does not turn the name.)
+ */
+export const siteId = (b, a) => anchorSite(b.layer, b.x, b.y, b.z, a);
 
 /**
  * A site in world coordinates, for a placed block.
@@ -74,7 +83,7 @@ export function siteWorld(def, b, i) {
   const [px, py] = turnXY(p[0], p[1], q, S, S);
   const [nx, ny] = turnDir(n[0], n[1], q);
   return {
-    id: siteId(b, i),
+    id: siteId(b, a),
     block: b,
     index: i,
     kind: a.kind,
@@ -144,6 +153,7 @@ export function viable(world, site) {
  * whole sweep is a map lookup per site.
  */
 export function survey(world, catalog) {
+  if (world.indexed) reindex(world, catalog);
   const out = [];
   for (const b of world.blocks.values()) {
     const def = catalog.get(b.id);
@@ -156,6 +166,53 @@ export function survey(world, catalog) {
     }
   }
   return out;
+}
+
+/**
+ * BRING A `piranesi/3` FILE'S ANCHOR CHOICES ACROSS — or refuse to, out loud.
+ *
+ * An old key names a site by its index in the list `stack.js anchorsFor` deals,
+ * so the translation is "ask today's sampler what it deals and take the i-th".
+ * That is exact while today's sampler is the one that wrote the file, and a
+ * catastrophe the day it is not: every torch in every save moves to a different
+ * bracket with nothing anywhere saying so.
+ *
+ * So it is GATED on a pinned stamp of the sampler's actual output. If the
+ * sampler has moved, nothing is rewritten, the old keys stay exactly where they
+ * are, and `world.anchorNote` says why — an index that fails visibly beats a
+ * migration that lies. See `stack.js samplerStamp`.
+ *
+ * Called from `survey`, which is the one place every path that can SEE an anchor
+ * goes through, so no caller has to remember.
+ */
+export function reindex(world, catalog, stamp = samplerStamp()) {
+  world.indexed = 0;                     // whatever happens, do not try twice
+  if (stamp !== SAMPLER) {
+    world.anchorNote = 'this building names its anchors the old way and the sampler has '
+      + 'changed since — the choices are kept as they are rather than moved to the wrong walls';
+    return 0;
+  }
+  let moved = 0, lost = 0;
+  for (const [id, kind] of [...world.anchors.entries()]) {
+    if (!isIndexKey(id)) continue;
+    const hash = id.lastIndexOf('#');
+    const stem = id.slice(0, hash);
+    const i = Number(id.slice(hash + 1));
+    const b = world.blocks.get(stem);
+    const def = b && catalog.get(b.id);
+    const a = def && def.anchors && def.anchors[i];
+    world.anchors.delete(id);
+    // A site the block no longer offers is dropped, not guessed at — the same
+    // rule `forgetAnchorsAt` applies when the block itself goes.
+    if (!a) { lost++; continue; }
+    world.anchors.set(siteId(b, a), kind);
+    moved++;
+  }
+  if (moved || lost) {
+    world.anchorNote = `${moved} anchor choice(s) moved to the new naming`
+      + (lost ? `; ${lost} named a site this build's blocks no longer have` : '');
+  }
+  return moved;
 }
 
 /* ------------------------------------------------------------- the pieces -- */

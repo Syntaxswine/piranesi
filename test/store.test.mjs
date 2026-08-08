@@ -7,10 +7,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { Store, KEYS, OLD, readFile, blocksToFile, buildingToFile, buildingText, slug } from '../js/store.js';
+import { readFileSync } from 'node:fs';
+
+import {
+  Store, KEYS, OLD, bkey, readFile, blocksToFile, buildingToFile, buildingText,
+  slug, hashOf, ago, FORMAT,
+} from '../js/store.js';
 import { describe as read, nameOf, shelfToText, shelfFromText } from '../js/naming.js';
-import { World } from '../js/world.js';
-import { buildCatalog, blockFromRecipe, add } from '../js/stack.js';
+import { World, isIndexKey } from '../js/world.js';
+import { buildCatalog, blockFromRecipe, add, samplerStamp, SAMPLER } from '../js/stack.js';
+import { survey, siteId, reindex } from '../js/anchors.js';
 import { PLAN_IDS } from '../js/plan.js';
 import { everyBlock } from '../js/enumerate.js';
 import { measure, profile, keyOf } from '../js/measure.js';
@@ -117,21 +123,83 @@ test('storage that will not parse is QUARANTINED before anything writes over it'
   // The invariant the code claimed was "a key that will not read is never
   // written over". The invariant it tested was "the reader does not delete it".
   // They differ by exactly the bug, so the test now writes afterwards.
-  const s = fakeStorage({ [KEYS.buildings]: '{not json' });
+  const k = bkey('the-gallery');
+  const s = fakeStorage({
+    [KEYS.index]: JSON.stringify([{ name: 'the gallery', slug: 'the-gallery' }]),
+    [k]: '{not json',
+  });
   const store = new Store(s);
-  assert.deepEqual(store.buildings(), []);
+  assert.equal(store.building('the gallery'), null);
   assert.match(store.drain().join(' '), /would not read/);
 
-  store.saveBuilding('anything', { format: 'piranesi/3', palette: [], cells: [] });
-  assert.equal(s.getItem(`${KEYS.buildings}~broken`), '{not json',
+  store.saveBuilding('the gallery', { format: FORMAT, palette: [], cells: [] });
+  assert.equal(s.getItem(`${k}~broken`), '{not json',
     'the original text must survive the write that follows the failed read');
 
   // And a second failure does not overwrite the first copy — the FIRST one is
   // the good one, and by the second the damage has already been done once.
   const store2 = new Store(s);
-  s.setItem(KEYS.buildings, '{different rubbish');
-  store2.buildings();
-  assert.equal(s.getItem(`${KEYS.buildings}~broken`), '{not json');
+  s.setItem(k, '{different rubbish');
+  store2.building('the gallery');
+  assert.equal(s.getItem(`${k}~broken`), '{not json');
+});
+
+test('ONE BAD BYTE TAKES ONE BUILDING, not the library — BACKLOG 0v', () => {
+  // The whole collection used to live in `piranesi/buildings`, so a value that
+  // would not parse cost every building at once. Per-building keys shrink the
+  // blast radius to the one that is actually damaged.
+  const s = fakeStorage();
+  const store = new Store(s);
+  const w = { format: FORMAT, palette: [], cells: [[0, 0, 0, 0]] };
+  store.saveBuilding('a', w);
+  store.saveBuilding('b', w);
+  store.saveBuilding('c', w);
+  s.setItem(bkey('b'), 'not json at all');
+
+  const fresh = new Store(s);
+  assert.deepEqual(fresh.buildings().map((x) => x.name), ['a', 'c'], 'the other two are untouched');
+  assert.equal(s.getItem(`${bkey('b')}~broken`), 'not json at all', 'and the damaged one is kept');
+  assert.match(fresh.drain().join(' '), /would not read/);
+});
+
+test('a corrupt index is rebuilt from the buildings themselves — BACKLOG 0v', () => {
+  // The index is a convenience and never the authority: the buildings are under
+  // their own keys, so losing the list of them loses nothing.
+  const s = fakeStorage();
+  const store = new Store(s);
+  const w = { format: FORMAT, palette: [], cells: [] };
+  store.saveBuilding('the long gallery', w);
+  store.saveBuilding('the well', w);
+
+  s.setItem(KEYS.index, '[[[nonsense');
+  const fresh = new Store(s);
+  const names = fresh.index().map((e) => e.name).sort();
+  assert.deepEqual(names, ['the long gallery', 'the well'], 'both came back');
+  assert.match(fresh.drain().join(' '), /not in the index/);
+  assert.equal(s.getItem(`${KEYS.index}~broken`), '[[[nonsense');
+
+  // …and the repair is written, so it is not re-derived on every read.
+  assert.equal(JSON.parse(s.getItem(KEYS.index)).length, 2);
+});
+
+test('a quota failure on one building does not stop another — BACKLOG 0v', () => {
+  // THE POINT OF THE SPLIT. With one key, `setItem` had to fit the whole array
+  // every time; once it did not, nothing could be saved at all — including a
+  // brand-new building with one block in it.
+  const s = fakeStorage();
+  const store = new Store(s);
+  const big = { format: FORMAT, palette: [], cells: [[0, 0, 0, 0]] };
+  store.saveBuilding('the big one', big);
+
+  const raw = s.setItem.bind(s);
+  s.setItem = (k, v) => {
+    if (k === bkey('the-big-one')) { const e = new Error('full'); e.name = 'QuotaExceededError'; throw e; }
+    return raw(k, v);
+  };
+  assert.equal(store.saveBuilding('the big one', { ...big, cells: [[0, 0, 0, 0], [9, 0, 0, 0]] }).ok, false);
+  assert.match(store.drain().join(' '), /out of storage/);
+  assert.equal(store.saveBuilding('a small one', { format: FORMAT, palette: [], cells: [] }).ok, true,
+    'the small one still goes in — that is the whole of 0v');
 });
 
 test('the shelf keeps what it cannot build, even across a write', () => {
@@ -179,14 +247,15 @@ test('a Store constructs where the browser refuses storage outright', () => {
 /* ------------------------------------------------------------ the buildings */
 
 test('a building is saved, reopened, renamed and deleted by name', () => {
-  const store = new Store(fakeStorage());
+  const s = fakeStorage();
+  const store = new Store(s);
   const cat = buildCatalog(4, 1);
   add(cat, STAIR);
   const w = new World(cat);
   w.place(0, 0, 0, STAIR);
   w.place(9, 0, 0, STAIR);
 
-  assert.equal(store.saveBuilding('the gallery', w.toJSON(), { layer: 2 }), true);
+  assert.equal(store.saveBuilding('the gallery', w.toJSON(), { layer: 2 }).ok, true);
   assert.equal(store.openName(), 'the gallery', 'saving opens it');
   assert.equal(store.building('the gallery').world.cells.length, 2);
   assert.equal(store.building('the gallery').view.layer, 2, 'the view rides along, in storage only');
@@ -194,6 +263,10 @@ test('a building is saved, reopened, renamed and deleted by name', () => {
   assert.equal(store.renameBuilding('the gallery', 'the long gallery'), true);
   assert.equal(store.openName(), 'the long gallery', 'and the rename follows the open one');
   assert.equal(store.building('the gallery'), null);
+  // A RENAME DOES NOT MOVE THE KEY. Moving it would be a copy and a delete, and
+  // this module does not delete somebody's work to accomplish a relabelling.
+  assert.ok(s.m.has(bkey('the-gallery')), 'the slug is minted once and stays');
+  assert.equal(store.building('the long gallery').slug, 'the-gallery');
 
   store.saveBuilding('another', w.toJSON());
   assert.equal(store.renameBuilding('another', 'the long gallery'), false, 'names do not collide silently');
@@ -201,6 +274,20 @@ test('a building is saved, reopened, renamed and deleted by name', () => {
 
   store.removeBuilding('another');
   assert.deepEqual(store.buildings().map((b) => b.name), ['the long gallery']);
+  assert.equal(s.m.has(bkey('another')), false, 'a deletion is a deletion');
+});
+
+test('two names that slug alike get two keys', () => {
+  // `a b` and `a-b` both want `a-b`, and two buildings sharing a key is one
+  // building with the other one gone.
+  const store = new Store(fakeStorage());
+  const w = { format: FORMAT, palette: [], cells: [] };
+  store.saveBuilding('the well', w);
+  store.saveBuilding('the-well', { ...w, cells: [[0, 0, 0, 0]] });
+  const slugs = store.index().map((e) => e.slug);
+  assert.deepEqual(slugs, ['the-well', 'the-well-2']);
+  assert.equal(store.building('the well').world.cells.length, 0);
+  assert.equal(store.building('the-well').world.cells.length, 1);
 });
 
 test('a building outlives the blocks it was built from', () => {
@@ -220,6 +307,175 @@ test('a building outlives the blocks it was built from', () => {
   const back = World.fromJSON(fresh, store.building('a').world, (r) => blockFromRecipe(r));
   assert.equal(back.size, 1, 'and the building still stands');
   assert.deepEqual(back.missing, []);
+});
+
+test('the one-key library is brought across per building, and kept — BACKLOG 0v', () => {
+  const s = fakeStorage({
+    [OLD.buildings]: JSON.stringify([
+      { name: 'the vaults', world: { format: 'piranesi/3', palette: [], cells: [[0, 0, 0, 0]] }, view: { layer: 1 } },
+      { name: 'the well', world: { format: 'piranesi/3', palette: [], cells: [] } },
+    ]),
+  });
+  const store = new Store(s);
+  assert.deepEqual(store.index().map((e) => e.name), ['the vaults', 'the well']);
+  assert.equal(store.building('the vaults').view.layer, 1, 'the view came too');
+  assert.ok(s.m.has(bkey('the-vaults')) && s.m.has(bkey('the-well')));
+  assert.ok(s.m.has(OLD.buildings), 'and the old value is left exactly where it was');
+});
+
+test('a migration that cannot finish does not mark itself finished — BACKLOG 0v', () => {
+  // A HALF-WRITTEN INDEX IS THE ONE OUTCOME THAT LOSES A BUILDING: it says the
+  // upgrade is done while some of the work is still only in the old key.
+  const s = fakeStorage({
+    [OLD.buildings]: JSON.stringify([
+      { name: 'a', world: { format: 'piranesi/3', palette: [], cells: [] } },
+      { name: 'b', world: { format: 'piranesi/3', palette: [], cells: [] } },
+    ]),
+  });
+  const raw = s.setItem.bind(s);
+  s.setItem = (k, v) => {
+    if (k === bkey('b')) { const e = new Error('full'); e.name = 'QuotaExceededError'; throw e; }
+    return raw(k, v);
+  };
+  const store = new Store(s);
+  store.index();
+  assert.equal(s.m.has(KEYS.index), false, 'the index key is NOT written, so the next boot tries again');
+  assert.match(store.drain().join(' '), /tried again/);
+  assert.ok(s.m.has(OLD.buildings), 'and the old value still holds both');
+});
+
+/* ------------------------------------------------------------- the two tabs */
+
+test('TWO TABS ON ONE BUILDING: the second write is refused — BACKLOG 0u', () => {
+  // Reproduced, not reasoned about. Two `Store`s over one storage IS two tabs:
+  // that is the whole of the bug. Both boot into `openName()`, each holds its
+  // own in-memory World, and the autosave fires on every placement — so a stray
+  // click in a stale tab wrote its old world over an hour of building, and the
+  // loser was always the tab with the work in it.
+  const s = fakeStorage();
+  const A = new Store(s), B = new Store(s);
+  assert.notEqual(A.session, B.session, 'two tabs are two tabs');
+
+  const world = (n) => ({ format: FORMAT, palette: [], cells: Array.from({ length: n }, (_, i) => [i * 9, 0, 0, 0]) });
+  A.saveBuilding('the gallery', world(1));
+  B.open('the gallery');                           // B opens the same one
+  A.saveBuilding('the gallery', world(40));        // …and A builds for an hour
+
+  const got = B.saveBuilding('the gallery', world(1));
+  assert.equal(got.ok, false, 'B must not be allowed to write its stale world');
+  assert.ok(got.conflict, 'and it says WHY, because the way out depends on it');
+  assert.match(B.drain().join(' '), /changed in another tab/);
+  assert.equal(A.building('the gallery').world.cells.length, 40, "A's hour is still there");
+});
+
+test('…and the three ways out of it, each keeping what it says — BACKLOG 0u', () => {
+  const s = fakeStorage();
+  const world = (n) => ({ format: FORMAT, palette: [], cells: Array.from({ length: n }, (_, i) => [i * 9, 0, 0, 0]) });
+
+  // 1. SAVE AS — B keeps its own under another name and nothing is lost.
+  {
+    const A = new Store(s), B = new Store(s);
+    A.saveBuilding('g', world(1)); B.open('g'); A.saveBuilding('g', world(40));
+    assert.equal(B.saveBuilding('g (2)', world(1)).ok, true);
+    assert.equal(A.building('g').world.cells.length, 40);
+    assert.equal(B.building('g (2)').world.cells.length, 1);
+  }
+  // 2. RE-OPEN — B reads A's, and is now holding the thing it is looking at.
+  {
+    const s2 = fakeStorage();
+    const A = new Store(s2), B = new Store(s2);
+    A.saveBuilding('g', world(1)); B.open('g'); A.saveBuilding('g', world(40));
+    assert.equal(B.saveBuilding('g', world(1)).ok, false);
+    assert.equal(B.open('g').world.cells.length, 40, 'B re-reads');
+    assert.equal(B.saveBuilding('g', world(41)).ok, true, 'and may write on top of what it read');
+  }
+  // 3. TAKE OVER — B says "mine", deliberately, and A is the one refused next.
+  {
+    const s3 = fakeStorage();
+    const A = new Store(s3), B = new Store(s3);
+    A.saveBuilding('g', world(1)); B.open('g'); A.saveBuilding('g', world(40));
+    B.takeOver('g');
+    assert.equal(B.saveBuilding('g', world(1)).ok, true);
+    assert.equal(A.saveBuilding('g', world(41)).ok, false, 'and now it is A that is told');
+  }
+});
+
+test('LOOKING AT THE LIST IS NOT OPENING EVERYTHING IN IT — BACKLOG 0u', () => {
+  // The check is "did this tab see what is there now", and if merely READING a
+  // record counted, then drawing the buildings list — which reads every one of
+  // them — would tell this tab it held the lot. The guard would then pass for a
+  // building this tab has never had on screen, which is the bug wearing a
+  // tick-mark.
+  const s = fakeStorage();
+  const A = new Store(s), B = new Store(s);
+  const world = (n) => ({ format: FORMAT, palette: [], cells: [[n, 0, 0, 0]] });
+  A.saveBuilding('g', world(1));
+  B.buildings();                                   // B draws a list
+  B.summaries();                                   // …and a summary of each
+  assert.equal(B.saveBuilding('g', world(2)).ok, false, 'B never opened it, so B may not write it');
+  assert.equal(B.open('g').world.cells[0][0], 1, 'opening is the deliberate act');
+  assert.equal(B.saveBuilding('g', world(2)).ok, true);
+});
+
+test('a building with no token is adopted, not refused — BACKLOG 0u', () => {
+  // Everything already in somebody's browser was written before there were
+  // tokens. Refusing those would make the upgrade look exactly like the bug.
+  const s = fakeStorage({
+    [KEYS.index]: JSON.stringify([{ name: 'old', slug: 'old' }]),
+    [bkey('old')]: JSON.stringify({ name: 'old', slug: 'old', world: { format: FORMAT, palette: [], cells: [] } }),
+  });
+  const store = new Store(s);
+  assert.equal(store.saveBuilding('old', { format: FORMAT, palette: [], cells: [[0, 0, 0, 0]] }).ok, true);
+  assert.match(JSON.parse(s.getItem(bkey('old'))).token, new RegExp(`^${store.session}\\.`),
+    'and stamped from here on');
+});
+
+/* ------------------------------------------------- which copy is which — 0x */
+
+test('a building knows when it was written and what it contains — BACKLOG 0x', () => {
+  const s = fakeStorage();
+  const store = new Store(s);
+  const w = { format: FORMAT, palette: [], cells: [[0, 0, 0, 0]] };
+  store.saveBuilding('a', w);
+  const [sum] = store.summaries();
+  assert.ok(Date.parse(sum.at) > 0, 'a timestamp…');
+  assert.equal(sum.hash, hashOf(w), '…and a content identity');
+  assert.equal(sum.cells, 1);
+
+  // The hash is of the CONTENT, so two buildings arrived at differently but
+  // identical in fact are recognisably the same thing.
+  store.saveBuilding('b', { format: FORMAT, palette: [], cells: [[0, 0, 0, 0]] });
+  assert.equal(store.sameAs(w).name, 'a', 'and an import can ask before making a second copy');
+  assert.equal(store.summaries()[0].hash, store.summaries()[1].hash);
+  assert.equal(store.sameAs({ format: FORMAT, palette: [], cells: [] }), null);
+});
+
+test('an identical save is not a write, so the clock does not lie — BACKLOG 0x', () => {
+  // The autosave fires on every click, including the ones that change nothing —
+  // a right-click on empty air. A no-op that still moves the timestamp makes the
+  // one number that tells two copies apart useless.
+  const s = fakeStorage();
+  const store = new Store(s);
+  const w = { format: FORMAT, palette: [], cells: [[0, 0, 0, 0]] };
+  const first = store.saveBuilding('a', w, { layer: 0 });
+  const again = store.saveBuilding('a', w, { layer: 0 });
+  assert.equal(again.unchanged, true);
+  assert.equal(JSON.parse(s.getItem(bkey('a'))).at, first.at, 'the same content is the same save');
+  // …but a change of view IS a change worth keeping, or the layer you left off
+  // on never survives a reload.
+  assert.equal(store.saveBuilding('a', w, { layer: 3 }).unchanged, undefined);
+  assert.equal(JSON.parse(s.getItem(bkey('a'))).view.layer, 3);
+});
+
+test('ago says something useful at every scale', () => {
+  const t = Date.parse('2026-08-08T12:00:00Z');
+  assert.equal(ago(null), 'never saved');
+  assert.equal(ago('2026-08-08T11:59:30Z', t), 'just now');
+  assert.equal(ago('2026-08-08T11:20:00Z', t), '40m ago');
+  assert.equal(ago('2026-08-08T04:00:00Z', t), '8h ago');
+  assert.equal(ago('2026-08-05T12:00:00Z', t), '3d ago');
+  assert.equal(ago('2026-06-08T12:00:00Z', t), '2mo ago');
+  assert.equal(ago('nonsense'), '');
 });
 
 /* ---------------------------------------------------------------- the files */
@@ -329,6 +585,143 @@ test('slug never produces an empty or unsafe filename', () => {
   assert.equal(slug('///'), 'building');
   assert.equal(slug(''), 'building');
   assert.equal(slug('a/b\\c:d'), 'a-b-c-d');
+});
+
+/* -------------------------------------------------- the anchors — 0w and 0t */
+
+/** A recipe from the standard hand that actually offers somewhere to put a
+ *  torch. Not every block does — `anchorsFor` gives three in four a site. */
+function anchored() {
+  const cat = buildCatalog(24, 1);
+  const hit = [...cat.entries()].find(([, d]) => d.anchors && d.anchors.length >= 2);
+  assert.ok(hit, 'the standard hand must contain a block with anchors');
+  return { cat, id: hit[0], def: hit[1] };
+}
+
+const lit = (sites) => sites.filter((s) => s.kind === 'torch').map((s) => s.p.join(',')).sort();
+
+test('THE SAMPLER IS THE ONE THAT WROTE THE INDEX-KEYED SAVES — BACKLOG 0w', () => {
+  // A PRE-REGISTERED CHECK. Bringing a `piranesi/3` save across means asking
+  // today's `anchorsFor` what it deals and matching by position, which is exact
+  // only while today's sampler is the one that wrote the file. If this fails,
+  // the sampler has moved: `anchors.js reindex` will now refuse to touch old
+  // keys, and somebody has to decide what those saves should become. DO NOT
+  // simply re-pin the constant — that is the silent migration this guards.
+  assert.equal(samplerStamp(), SAMPLER,
+    'the anchor sampler has changed; index-keyed saves can no longer be moved by position');
+});
+
+test("a piranesi/3 save's torches land on the same brackets — BACKLOG 0w", () => {
+  const { cat, id, def } = anchored();
+
+  // The modern way: choices named by WHERE THEY ARE.
+  const now = new World(cat);
+  now.place(0, 0, 0, id);
+  const modern = survey(now, cat);
+  for (const s of modern) now.setAnchorKind(s.id, 'torch');
+  const file = now.toJSON();
+  assert.equal(file.format, 'piranesi/4');
+  assert.ok(file.anchors.every(([k]) => !isIndexKey(k)), 'and nothing is keyed by an index any more');
+
+  // The same choices as a `piranesi/3` file would have written them.
+  const legacy = {
+    format: 'piranesi/3', palette: file.palette, cells: file.cells,
+    anchors: def.anchors.map((_, i) => [`structure|0,0,0#${i}`, 'torch']),
+  };
+  const back = World.fromJSON(cat, legacy, (r) => blockFromRecipe(r));
+  assert.equal(back.indexed, def.anchors.length, 'the loader notices they are the old kind');
+
+  // THE CLAIM IS PHYSICAL: the same brackets are lit, in world coordinates.
+  // Comparing the keys would only prove the migration agrees with itself.
+  const after = survey(back, cat);
+  assert.ok(lit(after).length, 'something is lit at all');
+  assert.deepEqual(lit(after), lit(survey(now, cat)));
+  assert.match(back.anchorNote, /moved to the new naming/);
+  assert.equal(back.indexed, 0, 'and it is not attempted twice');
+});
+
+test('a site the block no longer has is dropped, and said — BACKLOG 0w', () => {
+  const { cat, id } = anchored();
+  const w = World.fromJSON(cat, {
+    format: 'piranesi/3', palette: [id], cells: [[0, 0, 0, 0]],
+    anchors: [['structure|0,0,0#99', 'ring']],
+  }, (r) => blockFromRecipe(r));
+  survey(w, cat);
+  assert.equal(w.anchors.size, 0, 'guessing at it would put a ring on the wrong wall');
+  assert.match(w.anchorNote, /no longer have/);
+});
+
+test('IF THE SAMPLER HAS MOVED, NOTHING IS REWRITTEN — BACKLOG 0w', () => {
+  // The trap the handoff named: the obvious repair is to rewrite saved keys to
+  // geometry at load time, and that is exact only while the sampler agrees with
+  // the one that wrote them. A MIGRATION THAT SILENTLY MOVES EVERY TORCH IS
+  // WORSE THAN AN INDEX THAT FAILS VISIBLY.
+  const { cat, id, def } = anchored();
+  const w = World.fromJSON(cat, {
+    format: 'piranesi/3', palette: [id], cells: [[0, 0, 0, 0]],
+    anchors: def.anchors.map((_, i) => [`structure|0,0,0#${i}`, 'torch']),
+  }, (r) => blockFromRecipe(r));
+
+  reindex(w, cat, 'some-other-sampler');
+  assert.ok([...w.anchors.keys()].every(isIndexKey), 'the old keys are exactly where they were');
+  assert.match(w.anchorNote, /sampler has changed/);
+  assert.equal(lit(survey(w, cat)).length, 0, 'nothing is lit, which is the visible failure');
+});
+
+test('a turned block keeps its torches on the wall they were bolted to', () => {
+  // The name is the site's LOCAL declaration, before the placement turn —
+  // `siteWorld` turns the point and the normal, not the name. Deriving it any
+  // other way is how a turned block ends up with its torches on the wrong wall,
+  // which looks entirely plausible until you turn the block back.
+  const { cat, id, def } = anchored();
+  const w = new World(cat);
+  w.place(0, 0, 0, id, 0);
+  const a = def.anchors[0];
+  w.setAnchorKind(siteId({ layer: 'structure', x: 0, y: 0, z: 0 }, a), 'ring');
+  const before = survey(w, cat).find((s) => s.kind === 'ring');
+  assert.ok(before);
+
+  w.place(0, 0, 0, id, 1);                        // the same cell, turned
+  w.setAnchorKind(siteId({ layer: 'structure', x: 0, y: 0, z: 0 }, a), 'ring');
+  const after = survey(w, cat).find((s) => s.kind === 'ring');
+  assert.equal(after.side, ['+x', '+y', '-x', '-y'][(['+x', '+y', '-x', '-y'].indexOf(a.side) + 1) % 4],
+    'the site moved round with the block…');
+  assert.equal(after.id, before.id, '…and is still called the same thing');
+});
+
+test('the committed corpus of old saves still comes across', () => {
+  // The handoff's own precondition for touching this at all: "whatever is done
+  // here needs a way to check itself against a committed corpus of saves first
+  // — of which there is currently one, and it has no anchors set."
+  const cat = buildCatalog(24, 1);
+  for (const [file, gen] of [['docs/sample-save.json', 3], ['docs/sample-anchors.json', 3]]) {
+    const data = JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'));
+    assert.equal(data.format, `piranesi/${gen}`, `${file} is kept AS an old file, on purpose`);
+    const w = World.fromJSON(cat, data, (r) => blockFromRecipe(r));
+    assert.deepEqual(w.missing, [], `${file}: every recipe in it still builds`);
+    assert.ok(w.size > 0, `${file}: and it is not empty`);
+    const sites = survey(w, cat);
+    if (data.anchors && data.anchors.length) {
+      assert.ok(data.anchors.every(([k]) => isIndexKey(k)), `${file}: the fixture IS index-keyed`);
+      assert.equal(lit(sites).length + sites.filter((s) => s.kind === 'ring').length,
+        data.anchors.length, `${file}: every choice found its bracket`);
+    }
+  }
+});
+
+test('the view rides in the file as a hint and changes nothing about the world — BACKLOG 0t', () => {
+  const cat = buildCatalog(4, 1);
+  const w = new World(cat);
+  w.place(0, 0, 0, [...cat.keys()][0]);
+  const view = { centre: [4, 4], layer: 2, yaw: 0.5, zoom: 1.5 };
+  const f = buildingToFile('x', w.toJSON(), view);
+  const got = readFile(f.body);
+  assert.equal(got.kind, 'building');
+  assert.deepEqual(got.view, view, 'it comes back out separately');
+  assert.equal(hashOf(got.world), hashOf(w.toJSON()),
+    'and it is NOT part of what the building is — you send somebody a building, not your camera');
+  assert.equal(World.fromJSON(cat, got.world, (r) => blockFromRecipe(r)).size, 1);
+  assert.equal(readFile(buildingToFile('x', w.toJSON()).body).view, null, 'and it is optional');
 });
 
 /* --------------------------------------------------------------- the names */

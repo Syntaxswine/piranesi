@@ -23,7 +23,7 @@
 
 import { World } from './world.js';
 import { buildCatalog, blockFromRecipe, add } from './stack.js';
-import { Store, buildingToFile, readFile } from './store.js';
+import { Store, buildingToFile, readFile, ago, bkey } from './store.js';
 import { download, pickFile } from './files.js';
 import { describe } from './naming.js';
 import { SUB } from './cube.js';
@@ -92,6 +92,9 @@ const state = {
   lossy: 0,
   /** The name of the building being worked on. The autosave writes into it. */
   open: '',
+  /** Set when another tab has written the open building. Blocks the autosave
+   *  until the player says which of the two they want — see `save`. */
+  conflict: false,
 };
 
 const camera = new Camera({});
@@ -165,6 +168,10 @@ function aim(width, height) {
 function resurvey() {
   if (state.sitesAt === state.world.revision) return;
   state.sites = survey(state.world, catalog);
+  // `survey` is where a `piranesi/3` save's index-keyed anchor choices are
+  // brought across — or refused, if the sampler has moved since. Either way the
+  // player is told, once.
+  if (state.world.anchorNote) { note(state.world.anchorNote); state.world.anchorNote = null; }
   state.sitesAt = state.world.revision;
   state.fittings = state.sites
     .filter((s) => s.viable && s.kind && s.kind !== 'none')
@@ -612,19 +619,53 @@ function save() {
       + 'not saving over it. Use "save as" to keep this state under a new name.');
     return;
   }
-  const view = { centre: state.centre.slice(), layer: state.layer, yaw: state.yaw, zoom: state.zoom };
-  if (!store.saveBuilding(state.open, state.world.toJSON(), view)) {
-    for (const p of store.drain()) note(p);
+  // ANOTHER TAB OWNS THIS BUILDING, and until that is settled the autosave says
+  // nothing more. It has already been reported once; repeating it on every click
+  // would push the way out of the message queue.
+  if (state.conflict) return;
+
+  const view = currentView();
+  const got = store.saveBuilding(state.open, state.world.toJSON(), view);
+  if (!got.ok && got.conflict) {
+    state.conflict = true;
+    note(`"${state.open}" was changed in another tab and nothing here has been saved. `
+      + '"save as" keeps this one under a new name; "revert" loads theirs.');
   }
   for (const p of store.drain()) note(p);
   buildings();
+}
+
+const currentView = () => ({
+  centre: state.centre.slice(), layer: state.layer, yaw: state.yaw, zoom: state.zoom,
+});
+
+/**
+ * IS THERE WORK ON SCREEN THAT IS NOT ON DISK?
+ *
+ * There never used to be: the autosave fired on every click and always went
+ * through, so leaving a building could not lose anything. Two of the things
+ * added here can now stop it — a lossy load, and another tab holding the
+ * building — and the moment saving can refuse, every "open something else" is a
+ * way to throw away an hour. Which is the same bug this round is about, arrived
+ * at from the opposite direction.
+ */
+function unsaved() {
+  if (!state.conflict && !state.lossy) return false;
+  return true;
+}
+function okToLeave(what) {
+  if (!unsaved()) return true;
+  return confirm(`"${state.open}" has changes that have NOT been saved`
+    + `${state.conflict ? ' — another tab holds it' : ' — it loaded short'}.\n${what} anyway?`);
 }
 
 /** Open a building by name. A saved building brings its own blocks: `register`
  *  lets it put a recipe on the shelf this session's hand never dealt, which is
  *  the whole point of the palette. */
 function openBuilding(name) {
-  const rec = store.building(name);
+  // `open`, not `building` — this tab is TAKING IT UP, and that is what makes a
+  // later write by another tab a conflict rather than a surprise.
+  const rec = store.open(name);
   if (!rec) return false;
   const w = World.fromJSON(catalog, rec.world, (r) => blockFromRecipe(r));
   state.lossy = (w.missing && w.missing.length) || 0;
@@ -637,7 +678,11 @@ function openBuilding(name) {
   }
   state.world = w;
   state.open = name;
+  // RE-READING IS ALSO HOW A CONFLICT ENDS. `store.record` noted the token it
+  // just read, so this tab is now the one holding the building it is looking at.
+  state.conflict = false;
   store.setOpen(name);
+  for (const p of store.drain()) note(p);
   if (rec.view) {
     state.centre = rec.view.centre ? rec.view.centre.slice() : state.centre;
     state.layer = rec.view.layer ?? state.layer;
@@ -671,7 +716,7 @@ function suggestName(w = state.world) {
 }
 
 function uniqueName(want) {
-  const taken = new Set(store.buildings().map((b) => b.name));
+  const taken = new Set(store.index().map((b) => b.name));
   if (!taken.has(want)) return want;
   for (let i = 2; ; i++) if (!taken.has(`${want} (${i})`)) return `${want} (${i})`;
 }
@@ -681,7 +726,10 @@ function uniqueName(want) {
 function buildings() {
   const box = $('#savelist');
   if (!box) return;
-  const list = store.buildings();
+  // SUMMARIES, not records: the list wants to know which buildings there are and
+  // when each was last written, and reading every world to draw a list of names
+  // is what per-building keys were supposed to stop.
+  const list = store.summaries();
   box.innerHTML = '';
   if (!list.length) {
     box.innerHTML = '<div class="none">Nothing saved yet.</div>';
@@ -692,9 +740,20 @@ function buildings() {
     row.className = 'row2';
     const pick = document.createElement('button');
     pick.className = 'pick' + (b.name === state.open ? ' on' : '');
-    pick.textContent = b.name;
-    pick.title = `${(b.world.cells || []).length} cells · ${(b.world.palette || []).length} kinds of block`;
-    pick.onclick = () => { openBuilding(b.name); note(`opened "${b.name}"`); };
+    // 0x — WHEN, AND WHICH ONE. Two similar buildings used to be indistinguishable
+    // in this list, so pruning a library was guesswork. The time is on the row;
+    // the content hash is in the tooltip, because two rows with the same hash are
+    // the same building whatever they are called.
+    pick.innerHTML = `<span class="nm">${esc(b.name)}</span><span class="when">${
+      b.broken ? 'unreadable' : ago(b.at)}</span>`;
+    pick.title = b.broken
+      ? 'this building would not read — its text is kept beside it'
+      : `${b.cells} cells · ${b.kinds} kinds of block · ${b.hash}`;
+    pick.onclick = () => {
+      if (b.name !== state.open && !okToLeave(`Open "${b.name}"`)) return;
+      openBuilding(b.name);
+      note(`opened "${b.name}"`);
+    };
     const x = document.createElement('button');
     x.className = 'drop';
     x.textContent = '×';
@@ -720,6 +779,12 @@ function buildings() {
  * "opened". Every way of losing work here ends in "and then it was saved over",
  * and every one of those depends on the player not having been told.
  */
+/** A building is named by the player, so its name is the one string in this UI
+ *  that is not ours. It goes through `textContent` everywhere but the row, which
+ *  needs two spans. */
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
 const noted = [];
 function note(msg) {
   if (msg && noted[noted.length - 1] !== msg) noted.push(msg);
@@ -732,6 +797,7 @@ function note(msg) {
 $('#mode').onclick = () => setMode(state.mode === BUILD ? EXPLORE : BUILD);
 $('#clear').onclick = () => {
   if (!confirm('Clear the whole building?')) return;
+  if (!okToLeave('Clear')) return;
   state.world = new World(catalog);
   save(); invalidate();
 };
@@ -742,18 +808,52 @@ $('#saveas').onclick = () => {
   const want = prompt('Call this building what?', state.open || suggestName());
   if (want == null) return;
   const name = want.trim() || suggestName();
-  if (store.building(name) && name !== state.open
-    && !confirm(`"${name}" already exists. Overwrite it?`)) return;
-  // Save-as is the escape hatch from a lossy load: you are deliberately keeping
-  // THIS state, blocks-that-would-not-build and all, under a name of your own.
+  const onto = store.building(name);
+  if (onto && name !== state.open && !confirm(`"${name}" already exists. Overwrite it?`)) return;
+  // Saving over the SAME name while another tab holds it is the one case the
+  // wording above does not cover, and it is the case where somebody loses an
+  // hour. The note said "save as keeps this one under a new name"; typing the
+  // old name back is a different decision and gets asked about separately.
+  if (onto && name === state.open && state.conflict
+    && !confirm(`"${name}" has been changed in another tab. Overwrite theirs with this one?`)) return;
+  // Save-as is the escape hatch from a lossy load AND from a two-tab conflict:
+  // either way you are deliberately keeping THIS state under a name of your own.
+  // Saving over a name you just confirmed is a decision, so the token check that
+  // guards the autosave does not get to veto it.
+  if (onto) store.takeOver(name);
   state.open = name;
   state.lossy = 0;
+  state.conflict = false;
   save();
   note(`saved as "${name}"`);
 };
 
+/**
+ * 0s — REVERT, which is the cheap undo and the other half of the conflict fix.
+ *
+ * The board has an undo stack; the game has an autosave and a `clear` behind a
+ * `confirm`. A full undo stack in a world that autosaves on every click is a
+ * bigger thing than it looks, and now that buildings are named and plural the
+ * useful ninety per cent is "put back what is on disk" — which is also exactly
+ * what you want when another tab has written under you and you have decided
+ * theirs is the good one.
+ */
+$('#revert').onclick = () => {
+  if (!store.building(state.open)) return note(`"${state.open}" has never been saved — nothing to go back to`);
+  if (state.world.size && !confirm(`Throw away changes to "${state.open}" and reload the saved one?`)) return;
+  const was = state.world.size;
+  if (!openBuilding(state.open)) return note('that building would not reload');
+  note(`reverted "${state.open}" — ${was} block(s) on screen, ${state.world.size} saved`);
+};
+
 $('#newb').onclick = () => {
-  if (state.world.size && !confirm('Start a new building? The one you are on is saved under its own name.')) return;
+  if (state.world.size && !unsaved()
+    && !confirm('Start a new building? The one you are on is saved under its own name.')) return;
+  // A NEW BUILDING REPLACES THE WORLD, so if the current one cannot be saved
+  // this is the click that throws it away. `save()` below would return in
+  // silence — that is the whole of the lossy and conflict rules — and the
+  // reassuring wording above would have been a lie.
+  if (!okToLeave('Start a new building')) return;
   save();                                       // keep what is there, then leave it
   state.world = new World(catalog);
   state.world.place(0, 0, 0, ids[0]);
@@ -766,7 +866,10 @@ $('#newb').onclick = () => {
 
 $('#exportb').onclick = () => {
   if (!state.world.size) return note('nothing built to export');
-  const f = buildingToFile(state.open, state.world.toJSON());
+  // 0t — the view rides along as a HINT. `World.fromJSON` never reads it, so a
+  // building is still a building and not a camera; but a big one imported at the
+  // default view looks empty, and `plateshot --load` had nowhere to stand.
+  const f = buildingToFile(state.open, state.world.toJSON(), currentView());
   download(f);
   note(`${f.name} — draw it with: node tools/plateshot.mjs --load ${f.name}`);
 };
@@ -785,6 +888,18 @@ $('#importb').onclick = async () => {
     shelf();
     return note(`${n} block(s) added to the shelf${got.bad.length ? ` · ${got.bad.length} unbuildable` : ''}`);
   }
+  // 0x — IS THIS ONE ALREADY HERE? Export a building, keep building for an hour,
+  // re-import the older file and you used to get a second entry with nothing to
+  // tell it from the first. The content hash answers exactly that question, and
+  // the answer is offered rather than enforced: two copies of one building is a
+  // legitimate thing to want, and the import is the player's instruction.
+  const twin = store.sameAs(got.world);
+  if (twin && !confirm(`That is the same building as "${twin.name}" (saved ${ago(twin.at)}).\n`
+    + 'Import it again as a second copy?')) {
+    openBuilding(twin.name);
+    return note(`opened "${twin.name}" — the file was identical to it`);
+  }
+
   // SAVED ONLY ONCE IT HAS OPENED. Writing first meant a file the loader chokes
   // on was already in storage, so it came back on every subsequent boot with no
   // UI left to remove it — one bad import bricked the page for good.
@@ -798,9 +913,18 @@ $('#importb').onclick = async () => {
   state.world = w;
   state.open = name;
   state.lossy = (w.missing && w.missing.length) || 0;
-  store.saveBuilding(name, got.world);
+  state.conflict = false;
+  store.saveBuilding(name, got.world, got.view || null);
+  if (got.view) {
+    state.centre = Array.isArray(got.view.centre) ? got.view.centre.slice() : state.centre;
+    state.layer = Number.isFinite(got.view.layer) ? got.view.layer : state.layer;
+    state.yaw = Number.isFinite(got.view.yaw) ? got.view.yaw : state.yaw;
+    state.zoom = Number.isFinite(got.view.zoom) ? got.view.zoom : state.zoom;
+    setLayer(state.layer);
+  }
   ids.length = 0; ids.push(...catalog.keys());
   shelf(); buildings(); invalidate(0);
+  for (const p of store.drain()) note(p);
   note(`opened "${name}" — ${w.size} block(s)`
     + (state.lossy ? ` · ${state.lossy} this version cannot build` : ''));
 };
@@ -814,6 +938,22 @@ $('#importb').onclick = async () => {
  * exactly the kind of thing nobody tells you.
  */
 addEventListener('storage', (e) => {
+  /**
+   * ANOTHER TAB WROTE THE BUILDING WE ARE ON.
+   *
+   * The save refuses on its own — that is the token — but the refusal only
+   * happens on the NEXT click, and until then you are building on a world that
+   * is already stale. `storage` fires in the other tabs the moment it happens,
+   * so the tab that is about to lose finds out immediately instead of at the
+   * bottom of the hour.
+   */
+  if (state.open && e.key === bkey(store.slugFor(state.open))) {
+    if (state.conflict) return;
+    state.conflict = true;
+    note(`"${state.open}" has just been written by another tab. Nothing here will be `
+      + 'saved until you choose: "save as" keeps this one, "revert" loads theirs.');
+    return;
+  }
   if (e.key !== 'piranesi/shelf') return;
   const before = catalog.size;
   drawnShelf(catalog);
@@ -833,7 +973,7 @@ addEventListener('storage', (e) => {
 {
   // Open the building that was open last, or the one named by `?slot=`, or the
   // first there is — and only make a new one if there is genuinely nothing.
-  const first = store.buildings()[0];
+  const first = store.index()[0];
   const want = SLOT || store.openName() || (first && first.name);
   for (const p of store.drain()) console.warn('piranesi:', p);
   if (!want || !openBuilding(want)) {

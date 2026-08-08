@@ -1,0 +1,23 @@
+{
+ "format": "piranesi/3",
+ "palette": [
+  "S:full,full,full:stone",
+  "S:twin,bar,bore:stone",
+  "A:x+:bar-wide/1:stone"
+ ],
+ "cells": [
+  [0,0,0,0],
+  [9,0,0,1,1],
+  [18,0,0,2,2],
+  [0,9,0,0,3],
+  [0,18,0,1]
+ ],
+ "anchors": [
+  ["structure|0,0,0#0","ring"],
+  ["structure|0,18,0#0","torch"],
+  ["structure|18,0,0#0","torch"],
+  ["structure|9,0,0#0","torch"],
+  ["structure|9,0,0#1","torch"],
+  ["structure|9,0,0#2","ring"]
+ ]
+}

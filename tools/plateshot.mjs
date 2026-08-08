@@ -33,6 +33,8 @@ import { buildCatalog } from '../js/blocks.js';
 import { blockFromRecipe } from '../js/stack.js';
 import { buildScene, scenes, catalogFor } from '../js/scenes.js';
 import { World } from '../js/world.js';
+import { survey, fittingAt } from '../js/anchors.js';
+import { LAYER, standingOn } from '../js/build.js';
 import { Camera, DEG } from '../js/math.js';
 import { Engraver } from '../js/engrave.js';
 import { readFileSync } from 'node:fs';
@@ -57,6 +59,11 @@ const ss = Number(arg('--ss', '2'));
 // from an empty catalogue and lets the file fill it — which is the whole point
 // of a save carrying its own blocks.
 let world;
+/** Whatever a saved building's fittings turn out to be — the torches and rings
+ *  the player set. Empty for a scene, which has none. */
+let fittings = [];
+/** `"view"` out of the file, if it carried one. See BACKLOG 0t. */
+let hint = null;
 if (has('--load')) {
   const data = JSON.parse(readFileSync(arg('--load'), 'utf8'));
   const cat = new Map();
@@ -72,6 +79,21 @@ if (has('--load')) {
     console.error(`nothing in ${arg('--load')} could be built — refusing to write an empty plate`);
     process.exit(1);
   }
+  // THE TORCHES ARE PART OF THE BUILDING. This drew the masonry and silently
+  // left off every fitting the player had set — so the one instrument that
+  // photographs a save was photographing a different building from the one in
+  // the file. `survey` is also where a `piranesi/3` file's index-keyed anchor
+  // choices are brought across, or refused out loud; see anchors.js.
+  const sites = survey(world, cat);
+  if (world.anchorNote) console.error(world.anchorNote);
+  fittings = sites
+    .filter((s) => s.viable && s.kind && s.kind !== 'none')
+    .map((s) => {
+      const m = fittingAt(s);
+      return m && { x: 0, y: 0, z: 0, rot: 0, size: [1, 1, 1], mesh: m, seedAt: s.p.map(Math.round), layer: 'fitting' };
+    })
+    .filter(Boolean);
+  hint = data.view && typeof data.view === 'object' ? data.view : null;
   var catalog = cat;
 } else {
   catalog = catalogFor(sceneId, buildCatalog());
@@ -81,16 +103,33 @@ if (has('--load')) {
 const eye = arg('--eye', null);
 const cam = new Camera({
   eye: eye ? eye.split(',').map(Number) : defaultEye(world),
-  yaw: Number(arg('--yaw', '90')) * DEG,
+  yaw: (arg('--yaw', null) !== null ? Number(arg('--yaw')) : defaultYaw()) * DEG,
   shift: Number(arg('--shift', String(H * 0.22))),
 });
 cam.setFraming({ width: W, height: H, hfovDeg: Number(arg('--fov', '76')) });
 
+/**
+ * WHERE TO STAND. A saved building may say — that is the `view` hint of BACKLOG
+ * 0t, written by the game's export and read by nothing until now, so a big
+ * building loaded here came up at a default eye that could easily be inside a
+ * wall or pointing at nothing.
+ *
+ * The hint is a BUILD view: a centre, a layer and a yaw over the board. The
+ * conversion is the one `game.js setMode` already makes when you press Tab — you
+ * step into the space at the layer you were drawing, looking at the middle of
+ * the board — so `--load` opens where the player left off, and `--eye` still
+ * overrides it.
+ */
 function defaultEye(w) {
+  if (hint && Array.isArray(hint.centre)) {
+    const back = LAYER * 1.6;
+    return [hint.centre[0] - back, hint.centre[1] - back, standingOn(hint.layer || 0)];
+  }
   const b = w.bounds();
   if (!b) return [0, -12, 2];
   return [(b.lo[0] + b.hi[0]) / 2, b.lo[1] - (b.hi[1] - b.lo[1]) * 0.42 - 5, b.lo[2] + 2.2];
 }
+function defaultYaw() { return hint && Array.isArray(hint.centre) ? 45 : 90; }
 
 const passes = arg('--passes', 'all');
 const opts = {
@@ -100,6 +139,7 @@ const opts = {
 };
 opts.skin = arg('--skin', 'stone');   // --skin hatch for the line engraver
 if (arg('--target', null)) opts.hatchTarget = Number(arg('--target'));
+if (fittings.length) opts.extra = fittings;
 
 const eng = new Engraver({ width: W, height: H, ss });
 const r = eng.render(world, cam, catalog, opts);

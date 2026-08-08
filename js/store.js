@@ -39,17 +39,49 @@ import { shelfToText, shelfFromText, describe } from './naming.js';
 export const KEYS = {
   draft: 'piranesi/drawing',      // the board's working drawing, as a recipe
   shelf: 'piranesi/shelf',        // [recipe, …] — the blocks you kept
-  buildings: 'piranesi/buildings', // [{ name, world, view }] — what you built
+  index: 'piranesi/index',        // [{ name, slug }] — WHICH buildings, not what
   open: 'piranesi/open',          // the name of the building currently open
+  tab: 'piranesi/tab',            // a counter, so each tab can mint its own token
 };
+
+/**
+ * ONE KEY PER BUILDING, and it is a bug fix rather than tidiness.
+ *
+ * `piranesi/buildings` held the whole library in one value, so `setItem` had to
+ * fit the entire array on every autosave. Once it did not fit, NOTHING could be
+ * saved — including a brand-new building with one block in it — and the only
+ * way out was devtools. It also meant one unreadable byte took the collection
+ * down rather than one building.
+ *
+ * The slug is minted ONCE, when the building is first written, and never
+ * changes. A rename moves the label, not the key: a rename that moved the key
+ * would be a copy followed by a delete, and this module does not delete
+ * somebody's work to accomplish a relabelling.
+ */
+export const bkey = (s) => `piranesi/building/${s}`;
+export const BPREFIX = 'piranesi/building/';
 
 /** The keys this replaces, kept so nobody's work is stranded by the upgrade. */
 export const OLD = {
   drawn: 'piranesi/drawn',        // the first shelf: [recipe, …]
   save: 'piranesi/save',          // the one and only building
+  buildings: 'piranesi/buildings', // the whole library in one value
 };
 
-export const FORMAT = 'piranesi/3';   // World.toJSON's own marker
+/**
+ * `piranesi/4`, and the bump is about ANCHORS.
+ *
+ * A /3 file keys its anchor choices by an INDEX into the block's generated list
+ * of sites — the exact bug `recipe.js` exists to kill, one level down. A /4 file
+ * keys them by geometry. An older build reading a /4 file would find no site
+ * matching any key and quietly show a building with all its torches gone, so /4
+ * is refused by the version check rather than half-read: see `readFile`, and
+ * `anchors.js reindex` for the upgrade going the other way.
+ */
+export const FORMAT = 'piranesi/4';
+/** The generations this build can read. A file older than this is upgraded and
+ *  said so; a file newer is refused. */
+export const READS = 4;
 
 /* ------------------------------------------------------------- the store -- */
 
@@ -72,6 +104,54 @@ export class Store {
     /** Every complaint since the last `drain()`. The pages show these; nothing
      *  in here ever throws at a caller who just wanted to save. */
     this.problems = [];
+    /**
+     * WHO THIS TAB IS, and it is the whole of the two-tab fix.
+     *
+     * `localStorage` is shared by every tab on the origin, and both of them boot
+     * into `openName()` — so drawing a block in one tab and building in another
+     * is the NORMAL workflow and a second game tab is one middle-click away.
+     * Each held its own in-memory `World` and the autosave fired on every
+     * placement, so one stray click in a stale tab wrote its old world over an
+     * hour of building. Nothing needs locking; it only has to NOTICE.
+     */
+    this.session = this.newSession();
+    /**
+     * Writes so far this session. A TOKEN NAMES THE WRITE, NOT THE TAB, and the
+     * distinction is the whole mechanism: with a per-tab token, tab A's second
+     * save carried the same token as its first, so tab B — which had read
+     * between them — still matched and was let through. It only refused when the
+     * two tabs interleaved in one particular order, which is to say it refused
+     * about half the time and looked like it worked.
+     */
+    this.writes = 0;
+    /** slug → the token that was there when this tab last read or wrote it. A
+     *  stored token that is not this one is somebody else's write. */
+    this.held = new Map();
+  }
+
+  /** A name for one write: which tab, and which of its writes. */
+  stamp() { return `${this.session}.${++this.writes}`; }
+
+  /**
+   * A name for this tab. `crypto.randomUUID` where there is one; a counter in
+   * storage where there is not.
+   *
+   * NOT `Math.random`, and not because of the project's law about it — that law
+   * is about the GENERATOR, where a block with a given seed has to be the same
+   * block forever. A tab token is the opposite kind of thing: it must be
+   * different every time, and the one property it needs is that two tabs never
+   * agree by accident.
+   */
+  newSession() {
+    try {
+      const c = globalThis.crypto;
+      if (c && typeof c.randomUUID === 'function') return c.randomUUID().slice(0, 8);
+    } catch { /* fall through */ }
+    // No crypto: a counter, which is exact within one profile, plus the clock,
+    // which covers two tabs racing on the read-modify-write of that counter.
+    const n = (Number(this.raw(KEYS.tab)) || 0) + 1;
+    try { this.s.setItem(KEYS.tab, String(n)); } catch { /* read-only storage */ }
+    return `${n.toString(36)}-${Date.now().toString(36).slice(-4)}`;
   }
 
   say(msg) { this.problems.push(msg); return msg; }
@@ -233,48 +313,232 @@ export class Store {
 
   /* --------------------------------------------------------- the buildings */
 
-  buildings() {
-    // Absent vs unreadable, as in `blocks()` — a corrupt list is never replaced.
-    const raw = !this.has(KEYS.buildings)
-      ? this.migrateBuildings() : this.get(KEYS.buildings, null);
-    return Array.isArray(raw) ? raw : [];
+  /**
+   * WHICH BUILDINGS THERE ARE — names and slugs, and deliberately nothing else.
+   *
+   * No cell counts, no sizes, no cached anything. A summary written down beside
+   * the thing it summarises is a derived quantity that has stopped deriving,
+   * which is the bug this project keeps meeting (`plan.js` §MASS, `naming.js`,
+   * the building name that froze at boot). The list view reads the records.
+   */
+  index() {
+    if (!this.has(KEYS.index)) {
+      // Once per Store, or a failed migration would re-run and re-complain on
+      // every read for the rest of the session.
+      if (!this.mig) this.mig = this.migrateBuildings();
+      return this.mig;
+    }
+    const raw = this.get(KEYS.index, null);
+    let list = Array.isArray(raw)
+      ? raw.filter((e) => e && typeof e.name === 'string' && typeof e.slug === 'string')
+      : [];
+    // AN ORPHANED RECORD IS STILL SOMEBODY'S WORK. If the index is lost, cut
+    // short by a quota failure, or clobbered by an older build, the buildings
+    // themselves are still sitting there under their own keys — so the index is
+    // a convenience and never the authority.
+    const stray = this.strays(new Set(list.map((e) => e.slug)));
+    if (stray.length) {
+      list = [...list, ...stray];
+      // SAID ONCE. `index()` is on the path of every save, and if the repair
+      // itself cannot be written — which is the case it most matters in — the
+      // same complaint would come back on every click and push everything else
+      // out of a three-line message queue.
+      if (!this.healed) { this.say(`${stray.length} building(s) were not in the index and have been put back`); }
+      this.healed = true;
+      this.put(KEYS.index, list);
+    }
+    return list;
   }
 
-  building(name) { return this.buildings().find((b) => b.name === name) || null; }
+  /** Building keys with no index entry, read back into entries. */
+  strays(known) {
+    const out = [];
+    let n = 0;
+    try { n = this.s.length || 0; } catch { n = 0; }
+    for (let i = 0; i < n; i++) {
+      let k = null;
+      try { k = this.s.key ? this.s.key(i) : null; } catch { k = null; }
+      if (!k || !k.startsWith(BPREFIX) || k.endsWith('~broken')) continue;
+      const s = k.slice(BPREFIX.length);
+      if (known.has(s)) continue;
+      const rec = this.get(k, null);
+      // A record that will not read has been quarantined by `get`; it keeps its
+      // place in the index under its slug so the name is not lost as well.
+      out.push({ name: (rec && typeof rec.name === 'string' && rec.name) || s, slug: s });
+    }
+    return out;
+  }
+
+  /** Every building, records and all. The expensive one — `summaries()` is what
+   *  a list wants, and it is expensive too, but honestly so. */
+  buildings() {
+    return this.index().map((e) => this.record(e)).filter(Boolean);
+  }
+
+  /**
+   * One building's record, by index entry. Null if the key is gone or corrupt —
+   * both of which are reported rather than looking like an empty building.
+   *
+   * @param hold  "and I am now working on this one". ONLY the tab's open
+   *   building may hold: `buildings()` reads every record to draw a list, and if
+   *   reading counted as holding then merely listing the library would tell this
+   *   tab it owned all of it — and the two-tab check would pass for a building
+   *   this tab has never had on screen.
+   */
+  record(entry, hold = false) {
+    const k = bkey(entry.slug);
+    if (!this.has(k)) { this.say(`"${entry.name}" is in the index but its record is gone`); return null; }
+    const rec = this.get(k, null);
+    if (!rec || !rec.world) { this.say(`"${entry.name}" would not read`); return null; }
+    if (hold) this.held.set(entry.slug, rec.token ?? null);
+    // The index's name wins: a rename writes both, and if they ever disagree the
+    // index is what the player has been looking at.
+    return { ...rec, name: entry.name, slug: entry.slug };
+  }
+
+  /** What a list needs: enough to tell two similar buildings apart, and no
+   *  world. See 0x — before this there was no timestamp and no content
+   *  identity, so a library of near-copies could not be pruned safely. */
+  summaries() {
+    return this.index().map((e) => {
+      const k = bkey(e.slug);
+      const rec = this.has(k) ? this.get(k, null) : null;
+      if (!rec || !rec.world) return { ...e, broken: true };
+      return {
+        ...e,
+        at: rec.at || null,
+        hash: rec.hash || hashOf(rec.world),
+        cells: (rec.world.cells || []).length,
+        kinds: (rec.world.palette || []).length,
+        token: rec.token || null,
+      };
+    });
+  }
+
+  /** Look at a building. */
+  building(name) {
+    const e = this.index().find((x) => x.name === name);
+    return e ? this.record(e) : null;
+  }
+
+  /** …and take it up: the same read, plus "this tab is now holding what it has
+   *  just seen", which is what makes a later write by another tab a conflict. */
+  open(name) {
+    const e = this.index().find((x) => x.name === name);
+    return e ? this.record(e, true) : null;
+  }
+
+  /** The slug for a name: the one it already has, or a fresh one that collides
+   *  with nothing. Two names can slug alike (`a b` and `a-b`) and two buildings
+   *  must never share a key. */
+  slugFor(name) {
+    const idx = this.index();
+    const found = idx.find((e) => e.name === name);
+    return found ? found.slug : freshSlug(name, new Set(idx.map((e) => e.slug)));
+  }
 
   /**
    * Save a building under a name. A name here IS typed by the player, because
    * unlike a block a building has no grammar to be read back out of — but it is
    * still only a label: what identifies a building is its cells and its
    * palette, and the palette holds recipes.
+   *
+   * @returns { ok, why?, conflict?, unchanged? } — never a bare boolean, because
+   *   "refused because another tab owns this" and "refused because the disk is
+   *   full" want different words on screen and a different way out.
    */
-  saveBuilding(name, world, view = null) {
-    const list = this.buildings();
-    const rec = { name, world, ...(view ? { view } : {}) };
-    const i = list.findIndex((b) => b.name === name);
-    if (i >= 0) list[i] = rec; else list.push(rec);
-    if (!this.put(KEYS.buildings, list)) return false;
+  saveBuilding(name, world, view = null, opts = {}) {
+    // ONE READ OF THE INDEX, taken before anything is written. Reading it again
+    // after the record has landed would find that record as an orphan and repair
+    // the index into containing it — which works, and complains about a "lost"
+    // building on every single save of a new one.
+    const idx = this.index();
+    const found = idx.find((e) => e.name === name);
+    const s = found ? found.slug : freshSlug(name, new Set(idx.map((e) => e.slug)));
+    const k = bkey(s);
+    const prior = this.has(k) ? this.get(k, null) : null;
+
+    // 0u — SOMEBODY ELSE HAS WRITTEN HERE SINCE WE LAST LOOKED.
+    //
+    // `held` is what this tab last read or wrote at this slug. A stored token
+    // that is neither means another tab owns the record, and the honest thing
+    // is to write nothing: the loser of a last-click-wins race is always the tab
+    // with the work in it. A record with no token at all is pre-upgrade and is
+    // adopted rather than refused.
+    if (prior && prior.token && this.held.get(s) !== prior.token && !opts.force) {
+      this.say(`"${name}" was changed in another tab — nothing here has been saved`);
+      return { ok: false, conflict: prior, why: 'another tab has written this building' };
+    }
+
+    const hash = hashOf(world);
+    // AN IDENTICAL WRITE IS NOT A WRITE. The autosave fires on every click,
+    // including the ones that change nothing (a right-click on empty air), and
+    // a no-op that still bumps the clock makes the library's own history lie.
+    if (prior && prior.hash === hash && sameView(prior.view, view)) {
+      this.held.set(s, prior.token ?? null);
+      return { ok: true, unchanged: true };
+    }
+
+    const token = this.stamp();
+    const rec = {
+      name, slug: s, world, ...(view ? { view } : {}),
+      at: new Date().toISOString(), hash, token,
+    };
+    if (!this.put(k, rec)) return { ok: false, why: this.problems[this.problems.length - 1] };
+    this.held.set(s, token);
+
+    if (!found) {
+      // THE RECORD IS WRITTEN FIRST AND THE INDEX SECOND, so a failure between
+      // them leaves an orphan the next `index()` picks up — rather than an index
+      // entry pointing at nothing.
+      this.put(KEYS.index, [...idx, { name, slug: s }]);
+    }
     this.put(KEYS.open, name);
+    return { ok: true, hash, at: rec.at, slug: s };
+  }
+
+  /** "This tab wins." The only way past a conflict that keeps THIS world — the
+   *  others are `save as` (a new name) and re-opening (theirs). */
+  takeOver(name) {
+    const s = this.slugFor(name);
+    const rec = this.get(bkey(s), null);
+    this.held.set(s, (rec && rec.token) ?? null);
     return true;
   }
 
   removeBuilding(name) {
-    const list = this.buildings().filter((b) => b.name !== name);
-    return this.put(KEYS.buildings, list);
+    const idx = this.index();
+    const e = idx.find((x) => x.name === name);
+    if (!e) return false;
+    this.del(bkey(e.slug));
+    this.held.delete(e.slug);
+    return this.put(KEYS.index, idx.filter((x) => x.slug !== e.slug));
   }
 
   renameBuilding(from, to) {
-    const list = this.buildings();
-    const b = list.find((x) => x.name === from);
-    if (!b) return false;
-    if (list.some((x) => x.name === to)) { this.say(`there is already a building called "${to}"`); return false; }
-    b.name = to;
+    const idx = this.index();
+    const e = idx.find((x) => x.name === from);
+    if (!e) return false;
+    if (idx.some((x) => x.name === to)) { this.say(`there is already a building called "${to}"`); return false; }
+    e.name = to;
+    // The KEY does not move. The record's own copy of the name is updated so an
+    // orphan recovered by `strays` comes back under the name it was last given.
+    const rec = this.get(bkey(e.slug), null);
+    if (rec) { rec.name = to; this.put(bkey(e.slug), rec); }
     if (this.get(KEYS.open) === from) this.put(KEYS.open, to);
-    return this.put(KEYS.buildings, list);
+    return this.put(KEYS.index, idx);
   }
 
   openName() { return this.get(KEYS.open, null); }
   setOpen(name) { return this.put(KEYS.open, name); }
+
+  /** A building already here with this content, if there is one. Import asks,
+   *  so re-importing a file you exported an hour ago is a recognised duplicate
+   *  rather than a second entry nothing can tell from the first. */
+  sameAs(world) {
+    const h = hashOf(world);
+    return this.summaries().find((b) => b.hash === h) || null;
+  }
 
   /* ---------------------------------------------------------- the upgrade */
 
@@ -293,26 +557,119 @@ export class Store {
     return list;
   }
 
+  /**
+   * Two generations of library, in order of age, into one key each.
+   *
+   * ALL OR NOTHING ON THE INDEX. If any record fails to write — quota, most
+   * likely, which is the very thing per-building keys exist to survive — the
+   * index key is NOT written, so the next boot tries again and the old value is
+   * still where it was. A half-written index that says migration is finished is
+   * the one outcome that loses a building.
+   */
   migrateBuildings() {
     const out = [];
-    // The old single save, plus any `?slot=` saves — the slot mechanism was the
-    // only way to have two buildings, and it was a URL parameter nobody could
-    // discover.
+    const taken = new Set();
+    let failed = 0;
+    const take = (name, world, view) => {
+      if (!world || !Array.isArray(world.cells)) return;
+      const s = freshSlug(name, taken);
+      taken.add(s);
+      const rec = { name, slug: s, world, ...(view ? { view } : {}), at: null, hash: hashOf(world) };
+      if (this.put(bkey(s), rec)) out.push({ name, slug: s });
+      else failed++;
+    };
+
+    // The one-key library, newest first in age order.
+    const lib = this.has(OLD.buildings) ? this.get(OLD.buildings, null) : null;
+    if (Array.isArray(lib)) for (const b of lib) if (b && typeof b.name === 'string') take(b.name, b.world, b.view);
+
+    // …and before that, the old single save plus any `?slot=` saves — the slot
+    // mechanism was the only way to have two buildings, and it was a URL
+    // parameter nobody could discover.
     let n = 0;
     try { n = this.s.length || 0; } catch { n = 0; }
+    const olds = [];
     for (let i = 0; i < n; i++) {
       let k = null;
       try { k = this.s.key ? this.s.key(i) : null; } catch { k = null; }
-      if (!k || !k.startsWith(OLD.save)) continue;
+      if (k && k.startsWith(OLD.save)) olds.push(k);
+    }
+    for (const k of olds) {
       const world = this.get(k, null);
       if (!world || !world.cells) continue;
       const slot = k.slice(OLD.save.length).replace(/^:/, '');
-      out.push({ name: slot || 'the first building', world });
+      const name = slot || 'the first building';
+      if (!out.some((e) => e.name === name)) take(name, world, null);
+    }
+
+    if (failed) {
+      this.say(`${failed} building(s) could not be moved to the new store — the old copy is untouched and this will be tried again`);
+      return out;
     }
     if (out.length) this.say(`${out.length} building(s) brought across from the old save`);
-    this.put(KEYS.buildings, out);
+    this.put(KEYS.index, out);
     return out;
   }
+}
+
+/** A key nothing else is using. Two names can slug alike — `a b` and `a-b` —
+ *  and two buildings sharing a key is one building with the other one gone. */
+function freshSlug(name, taken) {
+  const base = slug(name);
+  let s = base;
+  for (let i = 2; taken.has(s); i++) s = `${base}-${i}`;
+  return s;
+}
+
+/* ------------------------------------------------------------- identity -- */
+
+/**
+ * WHAT THIS BUILDING IS, as sixty-four bits of its own canonical text.
+ *
+ * 0x: there was no timestamp and no content identity, so exporting a building,
+ * building on for an hour and re-importing the older file gave you two entries
+ * and no way to tell which was which. The cells are already sorted — that is
+ * what `buildingText` is for — so the hash is nearly free and two identical
+ * buildings hash alike however they were arrived at.
+ *
+ * TWO FNV RUNS, not one. Thirty-two bits is four billion, which sounds ample and
+ * is not: the hash decides whether an import is a DUPLICATE of something already
+ * here, and a false "you already have this" would hide a building.
+ */
+export function hashOf(world) {
+  const t = buildingText(world);
+  let a = 0x811c9dc5, b = 0x01000193;
+  for (let i = 0; i < t.length; i++) {
+    const c = t.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193);
+    b = Math.imul(b ^ c, 0x85ebca6b) + 1 | 0;
+  }
+  return ((a >>> 0).toString(36) + (b >>> 0).toString(36).padStart(7, '0')).slice(0, 13);
+}
+
+/** Whether a stored view and a fresh one are the same view, to the precision a
+ *  player could tell. Used only to keep an unchanged save from being a write. */
+function sameView(a, b) {
+  if (!a || !b) return !a === !b;
+  const near = (x, y) => Math.abs((x || 0) - (y || 0)) < 1e-6;
+  return near(a.layer, b.layer) && near(a.yaw, b.yaw) && near(a.zoom, b.zoom)
+    && near((a.centre || [])[0], (b.centre || [])[0])
+    && near((a.centre || [])[1], (b.centre || [])[1]);
+}
+
+/** "4 minutes ago". Short, because it is a list of buildings and not a log. */
+export function ago(iso, now = Date.now()) {
+  if (!iso) return 'never saved';
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return '';
+  const s = Math.max(0, (now - t) / 1000);
+  if (s < 60) return 'just now';
+  const steps = [[60, 'm', 60], [3600, 'h', 24], [86400, 'd', 7], [604800, 'w', 5], [2592000, 'mo', 12]];
+  for (const [unit, tag, span] of steps) {
+    const v = Math.floor(s / unit);
+    if (v < span) return `${v}${tag} ago`;
+  }
+  return `${Math.floor(s / 31536000)}y ago`;
 }
 
 /** A Map-backed stand-in, so `new Store()` works with no browser at all. */
@@ -342,10 +699,10 @@ export const blocksToFile = (recipes, title) => ({
 
 /** A BUILDING AS A FILE — `World.toJSON` unchanged, so `plateshot --load` can
  *  pull a full plate of it without knowing this module exists. */
-export const buildingToFile = (name, world) => ({
+export const buildingToFile = (name, world, view = null) => ({
   name: `piranesi-${slug(name)}.json`,
   type: 'application/json',
-  body: buildingText(world),
+  body: buildingText(world, view),
 });
 
 /**
@@ -357,7 +714,7 @@ export const buildingToFile = (name, world) => ({
  * cell over six lines, so moving one block shows as thirty changed lines and
  * the property the sort exists to buy is gone.
  */
-export function buildingText(world) {
+export function buildingText(world, view = null) {
   const cells = (world.cells || []).map((c) => `  ${JSON.stringify(c)}`).join(',\n');
   const palette = (world.palette || []).map((r) => `  ${JSON.stringify(r)}`).join(',\n');
   const out = [`{`, ` "format": ${JSON.stringify(world.format || FORMAT)},`,
@@ -366,6 +723,18 @@ export function buildingText(world) {
   if (world.anchors && world.anchors.length) {
     out[out.length - 1] += ',';
     out.push(` "anchors": [\n${world.anchors.map((a) => `  ${JSON.stringify(a)}`).join(',\n')}\n ]`);
+  }
+  // 0t — A HINT, AND ONLY A HINT.
+  //
+  // You send somebody a building, not your camera, so `World.fromJSON` does not
+  // read this and a building imported without it is not broken. But a big
+  // building opening at the default view is disorienting to the point of looking
+  // empty, and `plateshot --load` had no idea where to stand either. It goes
+  // LAST and outside the world proper, so `hashOf` — which hashes the world's
+  // own text — is untouched by where you happened to be looking.
+  if (view) {
+    out[out.length - 1] += ',';
+    out.push(` "view": ${JSON.stringify(view)}`);
   }
   out.push('}');
   return out.join('\n') + '\n';
@@ -394,7 +763,7 @@ export function readFile(text) {
     // would be parsed by this one's reader, quietly, and written back
     // downgraded. Refusing a newer major is the whole reason to stamp a file.
     const gen = Number(String(data.format || '').split('/')[1]);
-    if (Number.isFinite(gen) && gen > 3) {
+    if (Number.isFinite(gen) && gen > READS) {
       return { kind: 'bad', why: `that file is ${data.format} and this build reads ${FORMAT} — it needs a newer Piranesi` };
     }
 
@@ -412,8 +781,11 @@ export function readFile(text) {
     if (data.palette && !data.palette.every((r) => typeof r === 'string')) {
       return { kind: 'bad', why: "that file's palette is not a list of recipes" };
     }
-    if (!Array.isArray(data.palette)) return { kind: 'building', world: data, note: 'an older save with no palette' };
-    return { kind: 'building', world: data };
+    // The view rides out of the file separately, because it is not part of the
+    // world and must not reach `World.fromJSON`.
+    const view = data.view && typeof data.view === 'object' ? data.view : null;
+    if (!Array.isArray(data.palette)) return { kind: 'building', world: data, view, note: 'an older save with no palette' };
+    return { kind: 'building', world: data, view };
   }
   const { recipes, bad } = shelfFromText(s);
   // NO GOOD RECIPES IS A BAD FILE, not an import of nothing. `hello world` is

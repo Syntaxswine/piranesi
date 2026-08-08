@@ -236,6 +236,53 @@ export function composeBlock(seed) {
   return blockFromRecipe(rollRecipe(seed));
 }
 
+/* ------------------------------------------------------- the sampler stamp */
+
+/**
+ * A PRE-REGISTERED CHECK, and it exists to make one migration refuse itself.
+ *
+ * Saves written before `piranesi/4` name an anchor site by its INDEX in the list
+ * `anchorsFor` deals, so bringing one across means asking today's sampler what
+ * it deals and matching by position. That is exact — but only while today's
+ * sampler agrees with the one that wrote the file, and **a migration that
+ * silently moves every torch is worse than an index that fails visibly.**
+ *
+ * So the sampler's actual output over a fixed probe is hashed, and the hash is
+ * pinned below. Change `anchorsFor`, `backed`, `ANCHOR_Z`, the green lines, or
+ * anything under them, and `test/store.test.mjs` fails with a note saying what
+ * it means; the migration then refuses rather than guessing, and old saves keep
+ * their raw keys until somebody decides what they should become.
+ *
+ * The probes are one of each family and a spread of masses, so a change that
+ * only moves solid blocks' sites is still caught.
+ */
+const PROBES = [
+  'S:full,full,full:stone',
+  'S:ell,bar,frame:stone',
+  'S:twin,quarters,rounded:rustic',
+  'S:bored,cross,tee:stone',
+  'A:y+:twin:stone',
+  'A:xl:corner:rustic',
+  'D:00ii,00ii,00ii:stone',
+  'D:00ii,004i!609in,6eii:stone',
+];
+
+/** The sampler as it stood when `piranesi/3` files were being written. */
+export const SAMPLER = 'yzubdn';
+
+let stamped = null;
+export function samplerStamp() {
+  if (stamped) return stamped;
+  let h = 0x811c9dc5;
+  for (const r of PROBES) {
+    const def = blockFromRecipe(r);
+    const line = `${r}=${def ? def.anchors.map((a) => `${a.side}@${a.u},${a.z}`).join('|') : 'x'};`;
+    for (let i = 0; i < line.length; i++) h = Math.imul(h ^ line.charCodeAt(i), 0x01000193);
+  }
+  stamped = (h >>> 0).toString(36).padStart(6, '0');
+  return stamped;
+}
+
 /**
  * A hand of blocks to build with.
  *

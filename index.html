@@ -66,10 +66,16 @@
   #savelist { margin-bottom: 6px; }
   #savelist .row2 { display: flex; gap: 4px; margin-bottom: 3px; }
   #savelist .pick {
-    flex: 1; padding: 3px 6px; text-align: left; font: inherit; cursor: pointer;
+    flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px;
+    padding: 3px 6px; text-align: left; font: inherit; cursor: pointer;
     background: #2e2c28; color: var(--ground); border: 1px solid #3d3a34;
-    border-radius: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    border-radius: 2px;
   }
+  /* WHEN, on every row.  Two similar buildings were indistinguishable in this
+     list, which made pruning a library guesswork — see BACKLOG 0x. */
+  #savelist .pick .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #savelist .pick .when { margin-left: auto; color: var(--rule); font-size: 9px; flex: none; }
+  #savelist .pick.on .when { color: #b9a99c; }
   #savelist .pick:hover { background: #383530; }
   #savelist .pick.on { border-color: var(--hot); color: var(--ground); }
   #savelist .drop {
@@ -161,6 +167,11 @@
       <div class="row">
         <button class="act" id="exportb">export</button>
         <button class="act" id="importb">import</button>
+      </div>
+      <!-- The cheap undo, and the way out of a two-tab conflict: put back what
+           is on disk.  See BACKLOG 0s and 0u. -->
+      <div class="row">
+        <button class="act" id="revert" title="throw away changes and reload the saved building">revert</button>
       </div>
     </details>
 
