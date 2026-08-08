@@ -19,6 +19,7 @@ import {
   SLICES, N, LAYERS, RISE, DIRS, HY, UNHY, idx, cellBox, CORNER_CELLS,
   blank, cellsToRects, rectsInYards, cellsFromRects,
   encodeDrawn, decodeDrawn, drawnMesh, rampWedge, planeIndex,
+  drawnPlanBody, planOfLayer, boardFormOfPlan, turnForm, formKey,
 } from '../js/drawn.js';
 
 const S = SUB;
@@ -98,42 +99,31 @@ test('cells survive the round trip through yards', () => {
 /* ------------------------------------------------- drawn == named, exactly */
 
 /**
- * THE BOARD CAN DRAW EVERY PLAN IN THE VOCABULARY, and this is where that is
- * said out loud. The curved ones need a token; here is which.
+ * THE BOARD CAN DRAW EVERY PLAN IN THE VOCABULARY.
  *
  * It was seven plans short until R came down to 2. At 2.5 a corner arc crossed
  * its edges at 2.5, between the planes at 2 and 3, so a round was a property of
  * the whole block and there was no way to ask for one corner of it. At 2 it
  * crosses at 2 and 7, the corner cell is exactly R by R, and a round becomes a
  * property of ONE CELL. That is the whole of why the circles work now.
+ *
+ * The table of WHICH token each curved plan needs used to live here, in the
+ * test, which was the wrong place for it: it is the answer to "what is this
+ * plan in the board's own terms", and only the test knew. It is `drawn.js
+ * CURVED` now, `boardFormOfPlan` builds on it, `planOfLayer` reads it — and this
+ * test, which compares solidity masks and has no exclusions, is what keeps it
+ * honest.
  */
-const CURVED = {
-  quarters: () => '~oooo',
-  rounded: () => allButCorners() + '~cccc',
-  drum: () => '*d',
-  shaft: () => '*s',
-  bore: () => '*b',
-  'wall-tee': () => encRect([0, 6, 9, 9]) + '~oo..',
-  'wall-curve': () => encRect([0, 6, 9, 9]) + encRect([6, 0, 9, 6]) + '~o...',
-};
-
-/** The square with the four corner cells left out — `rounded`'s middle. */
-function allButCorners() {
-  const cells = new Uint8Array(N * N).fill(1);
-  for (const [i, j] of CORNER_CELLS) cells[idx(i, j)] = 0;
-  return rectsInYards(cells).map(encRect).join('');
-}
-
 test('a drawn plan and the named plan it copies are the SAME BLOCK', () => {
-  // THE ONE THAT MATTERS. Draw each plan on the slice grid — rasterised into
-  // rectangles for the straight ones, with a corner or disc token for the
-  // curved ones — stack three of it, and the solidity mask must be identical to
-  // `S:<plan>,<plan>,<plan>`. Same lattice, same stone.
+  // THE ONE THAT MATTERS. Draw each plan on the slice grid, stack three of it,
+  // and the solidity mask must be identical to `S:<plan>,<plan>,<plan>`. Same
+  // lattice, same stone.
   //
   // No exclusions. A plan that fails here has a coordinate the board cannot
   // express, which would be a finding about the VOCABULARY, not about the test.
   for (const id of PLAN_IDS) {
-    const layer = CURVED[id] ? CURVED[id]() : rectsInYards(rasterise(PLANS[id].make())).map(encRect).join('');
+    const layer = drawnPlanBody(id);
+    assert.ok(layer, `${id}: the board must be able to draw it at all`);
     const drawn = `D:${layer},${layer},${layer}:stone`;
     const named = `S:${id},${id},${id}:stone`;
 
@@ -145,6 +135,65 @@ test('a drawn plan and the named plan it copies are the SAME BLOCK', () => {
     assert.ok(same(maskFor(a), maskFor(b)),
       `${id}: the drawn block is a different block from the named one`);
   }
+});
+
+test('…AND IT IDENTIFIES BACK, in every turn — BACKLOG 0r', () => {
+  // The other direction, and the one `kit.js` needs: given a hand-drawn storey,
+  // which plan is it? Without an answer a drawn block has no `plans`, matches
+  // almost no role, and — worse — every drawn block shares the empty diversity
+  // key, so a kit can hold exactly one of them. That is the arch bug of
+  // `featuresOf` happening a second time to a second family.
+  //
+  // Rasterising the plan and then asking is not circular: the two go through
+  // different code — `boardFormOfPlan` rasterises polygons, `planOfLayer` reads
+  // a decoded recipe — and the recipe has been through the encoder, the parser
+  // and the overlap rules in between.
+  for (const id of PLAN_IDS) {
+    for (let q = 0; q < 4; q++) {
+      const body = drawnPlanBody(id, q);
+      assert.ok(body, `${id} q${q}: the board must be able to draw it turned too`);
+      const d = decodeDrawn(`D:${body},${body},${body}:stone`);
+      assert.ok(d.ok, `${id} q${q}: ${body} — ${d.why}`);
+      const got = planOfLayer(d.layers[0]);
+      assert.ok(got, `${id} q${q}: drawn as ${body} and identified as nothing`);
+      assert.equal(got.id, id, `${id} q${q}: drawn as ${body} and identified as ${got.id}`);
+    }
+  }
+});
+
+test('a storey that is not in the vocabulary says NOTHING, not the nearest thing', () => {
+  // The whole value of the answer is that it can be trusted. A `usesPlans`
+  // filter that matched approximately would be the substitution this project
+  // refuses everywhere else.
+  const notPlans = [
+    '0069',              // 3 x 4.5 out of a corner — no plan is that
+    '0044eeii',          // two opposite corner cells, square not round
+    '60ii!006in',        // the cells of `full`, but a ramp climbs through it
+  ];
+  for (const body of notPlans) {
+    const d = decodeDrawn(`D:${body},-,-:stone`, { allowEmpty: true });
+    assert.ok(d.ok, `${body}: ${d.why}`);
+    assert.equal(planOfLayer(d.layers[0]), null, `${body} was matched to a plan it is not`);
+  }
+  // …while the ramp's own storey being unnameable does not stop the storey
+  // above it being named.
+  const stair = decodeDrawn('D:00ii,004i!609in,6eii:stone');
+  assert.equal(planOfLayer(stair.layers[0]).id, 'full');
+  assert.equal(planOfLayer(stair.layers[1]), null);
+});
+
+test('a drum survives being read back and written out again', () => {
+  // `parseLayer` SETS the drum's cells — that is how it refuses masonry standing
+  // where the drum stands — and the board CLEARS them when you pick a drum. The
+  // two conventions differ by exactly those nine cells, and `encodeLayer` used
+  // to emit them as rectangles beside the `*d`: a recipe that will not decode,
+  // produced from a recipe that did.
+  const rec = 'D:*d,00ii,-:stone';
+  const d = decodeDrawn(rec);
+  assert.ok(d.ok, d.why);
+  const again = encodeDrawn({ mat: d.mat, layers: d.layers });
+  assert.equal(again, rec, 'a decoded layer must encode back to itself');
+  assert.ok(decodeDrawn(again).ok);
 });
 
 test('the corner cell is exactly R by R, which is why a round is one cell', () => {

@@ -30,25 +30,48 @@
 
 import { measure, joinery, turnMask, keyOf, profile, SIDES, OPPOSITE } from './measure.js';
 import { decode } from './recipe.js';
+import { planOfLayer, encodeLayer } from './drawn.js';
 
 /* ------------------------------------------------------------- features -- */
 
-/** What a role filter may ask about, derived once per block. */
+/**
+ * What a role filter may ask about, derived once per block.
+ *
+ * THE DIVERSITY KEY MUST EXIST FOR EVERY FAMILY, and it has now been the same
+ * bug twice. It was the plan sequence — so all 58 arches shared the empty key,
+ * the kit could hold exactly one of them, and a role asking for ten barrel
+ * vaults came back with one. `D:` arrived and did it again: a hand-drawn block
+ * has no plans either, so an entire shelf of them collapsed to one entry
+ * (BACKLOG 0r). An arch's identity is its axis, hand and pier; a drawing's is
+ * its own three layer strings, which is exactly what its recipe is made of.
+ */
 export function featuresOf(sh) {
   const d = decode(sh.recipe);
   const arch = d.ok && d.family === 'arch';
-  const plans = d.ok && !arch ? d.layers.map((L) => L.id) : [];
+  const drawn = d.ok && d.family === 'drawn';
+  // A DRAWN STOREY'S PLAN IS MEASURED. `planOfLayer` compares the polygons the
+  // mesher will get against every plan in every turn, so a layer that IS `full`
+  // reports `full` and a layer that is nothing in the vocabulary reports
+  // nothing. Mapping the drawn tokens onto plan names by hand — `*b` "is" a
+  // bore — would be the substitution this project refuses, and would be a lie
+  // the moment somebody paints a bore-shaped hole a yard off centre.
+  const plans = drawn
+    ? d.layers.map((L) => (planOfLayer(L) || {}).id || null)
+    : (d.ok && !arch ? d.layers.map((L) => L.id) : []);
+  const named = plans.filter(Boolean);
   const pier = arch ? d.pier.id : null;
-  // THE DIVERSITY KEY MUST EXIST FOR BOTH FAMILIES.  It was the plan sequence,
-  // and an arch has no plans — so all 58 arches shared the empty key, the kit
-  // could hold exactly one of them, and a role asking for ten barrel vaults
-  // came back with one.  An arch's identity is its axis, hand and pier.
-  const seq = arch ? `A:${d.axis}${d.hand}:${pier}` : plans.join(',');
+  const bodies = drawn ? d.layers.map((L) => encodeLayer(L)) : null;
+  const seq = arch ? `A:${d.axis}${d.hand}:${pier}`
+    : drawn ? `D:${bodies.join(',')}` : plans.join(',');
   return {
-    plans, pier, seq,
+    // Only the storeys that ARE a plan go in `plans`, so `usesPlans` keeps
+    // meaning what it says; the nulls stay in `base`/`mid`/`top`, where the
+    // position matters and "this storey is not in the vocabulary" is an answer.
+    plans: named, pier, seq,
     // Coarser: the same idea regardless of storey order.  For an arch, every
     // hand of the same axis and pier.
-    set: arch ? `A:${d.axis}:${pier}` : [...plans].sort().join('+'),
+    set: arch ? `A:${d.axis}:${pier}`
+      : drawn ? `D:${[...bodies].sort().join('+')}` : [...plans].sort().join('+'),
     base: plans[0] || null,
     mid: plans[1] || null,
     top: plans[2] || null,

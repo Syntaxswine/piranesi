@@ -48,7 +48,10 @@
 
 import { Mesh } from './mesh.js';
 import { SUB, PLANES, DECKS, STOREY, R, R_WHOLE } from './cube.js';
-import { rect, extrudePlan, CORNERS, columnAt, coveAt, drum, bored } from './plan.js';
+import {
+  rect, extrudePlan, CORNERS, columnAt, coveAt, drum, bored,
+  PLANS, PLAN_IDS, turnPlan,
+} from './plan.js';
 import { tagFlat } from './forms.js';
 
 const S = SUB;
@@ -229,7 +232,18 @@ export function encodeLayer({ cells, rects, ramps = [], corners = '....', disc =
   // saying so in the encoding is better than encoding something that decode
   // will refuse.
   if (disc === 's' || disc === 'b') return '*' + disc;
-  const owned = new Set(ownedCells(corners).map(([i, j]) => idx(i, j)));
+  // A TOKEN OWNS ITS CELLS, and the drum is a token too.
+  //
+  // `parseLayer` sets the drum's cells in the fill — that is how it refuses
+  // masonry standing where the drum stands — while the board clears them when
+  // you pick a drum, so the two conventions differ by exactly those nine cells.
+  // Encoding a layer that came from the READER used to emit them as rectangles
+  // beside the `*d`, producing a recipe that will not decode. The function that
+  // writes and the function that reads have to agree about what a layer is.
+  const owned = new Set([
+    ...ownedCells(corners).map(([i, j]) => idx(i, j)),
+    ...(disc === 'd' ? drumCells().map(([i, j]) => idx(i, j)) : []),
+  ]);
   const paint = cells && owned.size
     ? cells.map((v, k) => (owned.has(k) ? 0 : v))
     : cells;
@@ -415,6 +429,163 @@ export function drawnMesh(d) {
   });
   tagFlat(m);
   return m;
+}
+
+/* ------------------------------------------------- a plan, ON THE BOARD -- */
+
+/**
+ * HOW THE BOARD DRAWS EACH PLAN IN THE VOCABULARY.
+ *
+ * This table lived in `test/drawn.test.mjs`, which is the wrong place for it: it
+ * is the answer to "what is this plan, in the board's own terms", and the test
+ * was the only thing that knew. Here it is production, the test reads it, and
+ * `planOfLayer` reads it — so the equivalence test (drawn block and named block
+ * are mask-identical, no exclusions) is now also the thing that keeps it honest.
+ *
+ * Only the CURVED plans need an entry. Everything else is rectangles and
+ * rasterises on its own.
+ */
+export const CURVED = {
+  quarters: { corners: 'oooo' },
+  rounded: { corners: 'cccc', fill: 'all-but-corners' },
+  drum: { disc: 'd' },
+  shaft: { disc: 's' },
+  bore: { disc: 'b' },
+  'wall-tee': { corners: 'oo..', rects: [[0, 6, 9, 9]] },
+  'wall-curve': { corners: 'o...', rects: [[0, 6, 9, 9], [6, 0, 9, 6]] },
+};
+
+/** A layer as three facts and nothing else: which cells hold stone, which
+ *  corners are curved, which disc stands on the axis. Two layers with the same
+ *  three are the same storey however differently they were written down —
+ *  a greedy partition is not unique and the polygons are not the shape. */
+export const formKey = (L) =>
+  `${Array.from(L.cells || []).join('')}|${L.corners || '....'}|${L.disc || ''}`;
+
+/** Mark the cells an axis-aligned rectangle on the slice planes covers. Returns
+ *  false for anything that is not one, which is what makes a plan the board
+ *  cannot express say so rather than come back as a near miss. */
+function fillRect(cells, [x0, y0, x1, y1]) {
+  const i0 = planeIndex(x0), j0 = planeIndex(y0), i1 = planeIndex(x1), j1 = planeIndex(y1);
+  if (i0 < 0 || j0 < 0 || i1 < 0 || j1 < 0 || i1 <= i0 || j1 <= j0) return false;
+  for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) cells[idx(i, j)] = 1;
+  return true;
+}
+
+/**
+ * Mark the cells a straight-edged polygon covers. An L, a T and a cross are one
+ * ring apiece in `plan.js` — not a list of rectangles — so this cannot be a
+ * rectangle test, which is what a first attempt was and it silently dropped
+ * `ell`, `ell-deep` and `notch` out of the vocabulary.
+ *
+ * A cell is wholly inside or wholly outside, always, because every vertex is on
+ * a slice plane and every edge is axis-aligned — so one crossing test at the
+ * cell's centre is exact rather than a sample. A vertex off the planes returns
+ * false, which is the board saying it cannot draw this.
+ */
+function fillPoly(cells, poly) {
+  for (const [x, y] of poly) {
+    if (!PLANES.some((p) => Math.abs(p - x) < 1e-6) || !PLANES.some((p) => Math.abs(p - y) < 1e-6)) return false;
+  }
+  for (let j = 0; j < N; j++) {
+    const cy = (SLICES[j] + SLICES[j + 1]) / 2;
+    for (let i = 0; i < N; i++) {
+      const cx = (SLICES[i] + SLICES[i + 1]) / 2;
+      let inside = false;
+      for (let a = 0, b = poly.length - 1; a < poly.length; b = a++) {
+        const [xa, ya] = poly[a], [xb, yb] = poly[b];
+        if ((ya > cy) !== (yb > cy) && cx < ((xb - xa) * (cy - ya)) / (yb - ya) + xa) inside = !inside;
+      }
+      if (inside) cells[idx(i, j)] = 1;
+    }
+  }
+  return true;
+}
+
+/** The board form of a named plan, unturned. Null if the board cannot draw it —
+ *  which no plan currently is, and `test/drawn.test.mjs` says so plan by plan. */
+export function boardFormOfPlan(id) {
+  const spec = CURVED[id] || {};
+  const corners = spec.corners || '....';
+  const disc = spec.disc || '';
+  const cells = new Uint8Array(N * N);
+  if (disc === 's' || disc === 'b') { cells.fill(1); return { cells, corners, disc }; }
+  if (spec.fill === 'all-but-corners') {
+    cells.fill(1);
+  } else if (spec.rects) {
+    for (const r of spec.rects) if (!fillRect(cells, r)) return null;
+  } else if (!disc && !spec.corners) {
+    for (const poly of PLANS[id].make()) if (!fillPoly(cells, poly)) return null;
+  }
+  for (const [i, j] of ownedCells(corners)) cells[idx(i, j)] = 1;
+  if (disc === 'd') for (const [i, j] of drumCells()) cells[idx(i, j)] = 1;
+  return { cells, corners, disc };
+}
+
+/**
+ * A board form, turned. Exact, and it is the LADDER that makes it so: `PLANES`
+ * is symmetric about 4.5 (9−7=2, 9−6=3, 9−4.5=4.5), so the cell grid is
+ * unchanged by a quarter-turn and a cell maps to a cell rather than to a
+ * fraction of one. `turnPlan` takes (x,y) to (S−y,x), which on cells is
+ * (i,j) → (N−1−j, i), and that carries corner k to corner k+1.
+ */
+export function turnForm({ cells, corners, disc }, q) {
+  const k = ((q % 4) + 4) % 4;
+  if (!k) return { cells, corners, disc };
+  let c = cells, s = corners;
+  for (let t = 0; t < k; t++) {
+    const next = new Uint8Array(N * N);
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) if (c[idx(i, j)]) next[idx(N - 1 - j, i)] = 1;
+    c = next;
+    s = [3, 0, 1, 2].map((m) => s[m]).join('');
+  }
+  return { cells: c, corners: s, disc };
+}
+
+/** Every plan, in every turn, by board form. ALL FOUR TURNS rather than
+ *  `PLANS[id].turns` — that is a declared number and this project's law is to
+ *  measure. A symmetric plan yields the same key four times, the first `q`
+ *  wins, and the answer is canonical for it. */
+const PLAN_BOARD = new Map();
+for (const id of PLAN_IDS) {
+  const base = boardFormOfPlan(id);
+  if (!base) continue;
+  for (let q = 0; q < 4; q++) {
+    const k = formKey(turnForm(base, q));
+    if (!PLAN_BOARD.has(k)) PLAN_BOARD.set(k, { id, q });
+  }
+}
+
+/**
+ * WHICH NAMED PLAN THIS STOREY IS — measured, not guessed.
+ *
+ * BACKLOG 0r: `kit.js featuresOf` keys on plan ids, so a hand-drawn block had no
+ * `plans` and matched almost no role. The tempting fix is to map the drawn
+ * tokens onto plan names by hand — `*b` "is" a bore, `~oooo` "is" quarters —
+ * which is the substitution this project refuses everywhere else, and would be
+ * wrong the moment somebody paints a bore-shaped hole a yard off centre.
+ *
+ * So it is a comparison of board forms. A layer that is a plan says which and in
+ * what turn; a layer that is not says nothing at all, which is the honest answer
+ * and the one that keeps `usesPlans: ['bore']` meaning what it says.
+ *
+ * A layer with a ramp in it is never a plan: a plan is a section and a ramp is a
+ * solid that changes height through the storey, so a stair would come back
+ * looking like a floor.
+ *
+ * @returns {{id, q}} or null.
+ */
+export function planOfLayer(L) {
+  if (L.ramps && L.ramps.length) return null;
+  return PLAN_BOARD.get(formKey(L)) || null;
+}
+
+/** The board's drawing of a named plan, as a recipe layer body — what the
+ *  equivalence test draws, and what the shelf would hold. */
+export function drawnPlanBody(id, q = 0) {
+  const form = boardFormOfPlan(id);
+  if (!form) return null;
+  return encodeLayer(turnForm(form, q));
 }
 
 /** The polygons a corner string stands for — `plan.js` owns their geometry. */
