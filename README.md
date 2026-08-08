@@ -17,11 +17,16 @@ snaking through a labyrinth.
 > but three files in `js/` are dead and the published site may still be serving
 > the old game. Blocks are still plain masses wanting relief and ornament.
 >
-> **Start at [`docs/HANDOFF-2026-08-07.md`](docs/HANDOFF-2026-08-07.md)** — the
-> current keystone: the grammar walked and measured, the hundred-block kit, the
-> openings, the owner's archetype spec, and every trap keyed by what you will
-> SEE when you hit it. [`HANDOFF-2026-08-06.md`](docs/HANDOFF-2026-08-06.md) is
-> still the reference for what the game IS, the renderer and the cube law.
+> **Start at [`docs/HANDOFF-2026-08-08.md`](docs/HANDOFF-2026-08-08.md)** — one
+> page, and it names the three known ways the save system can still lose work.
+> Read it before touching anything.
+>
+> Then [`HANDOFF-2026-08-07.md`](docs/HANDOFF-2026-08-07.md), the long keystone:
+> the grammar walked and measured, the hundred-block kit, the openings, the
+> owner's archetype spec, the drawing board, the radius change, and every trap
+> keyed by what you will SEE when you hit it.
+> [`HANDOFF-2026-08-06.md`](docs/HANDOFF-2026-08-06.md) is still the reference
+> for what the game IS, the renderer and the cube law.
 
 **Two modes.** *Build* is a rotatable three-quarter overhead view of the model —
 you place on one flat layer, the layer above is ghosted and the one below is

@@ -261,6 +261,16 @@
 > plural, the cheap version is a "revert to last saved" rather than a real undo
 > stack.
 >
+> **0u, 0v and 0w are the NEXT ROUND — see `HANDOFF-2026-08-08.md`, which ranks
+> them and gives the cheapest fix for each. They are the three known ways the
+> save system can still lose somebody's work.**
+>
+> **0x (NEW). Nothing tells an older copy of a building from a newer one.** No
+> timestamp, no content identity. Export, keep building, re-import the older
+> file and you get a second entry with no way to know which is which — a library
+> of similar buildings is hazardous to prune. The cells are already sorted, so a
+> content hash is nearly free.
+>
 > **0u (NEW). Two tabs on the same building overwrite each other.** Both open
 > `store.openName()` by default, each holds its own in-memory World, and the
 > autosave fires on every placement — so a stray click in a stale tab writes its
