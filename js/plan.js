@@ -148,6 +148,17 @@ export function cornersTwo(w = 3) {
   return [rect(0, S - w, w, S), rect(S - w, 0, S, w)];
 }
 
+/** ONE corner filled, everything else open — his 24. Not the same piece as
+ *  `corner`, which is a quarter of the whole block struck at 4.5 and reads as
+ *  two half-sides of masonry; this is a small block at one arris. */
+export function cornerSmall(w = 3) { return [rect(0, 0, w, w)]; }
+
+/** Two corners at the two ends of ONE side — his 28. The pair of piers a wall
+ *  would stand between, with the wall left out. */
+export function cornersSide(w = 3) {
+  return [rect(0, 0, w, w), rect(0, S - w, w, S)];
+}
+
 /** A single pier standing out from the middle of one side, the rest open.
  *  `OOO OOO OOO OXO`. */
 export function stub(w = 3, d = 3) { return [rect((S - w) / 2, 0, (S + w) / 2, d)]; }
@@ -248,6 +259,8 @@ export const PLANS = {
   'wall-tee': { make: () => wallTee(3), turns: 4 },
   'wall-curve': { make: () => wallCurve(3), turns: 4 },
   'corners-two': { make: () => cornersTwo(3), turns: 2 },
+  'corner-small': { make: () => cornerSmall(3), turns: 4 },
+  'corners-side': { make: () => cornersSide(3), turns: 4 },
   stub: { make: () => stub(3, 3), turns: 4 },
   rounded: { make: roundedPlan, turns: 1 },
   drum: { make: drum, turns: 1 },

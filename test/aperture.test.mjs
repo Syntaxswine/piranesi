@@ -130,7 +130,13 @@ test('openings are found as rectangles, positioned and sized in yards', () => {
   assert.equal(o[0].kind, 'door');
 });
 
-test('three yards is the doorway: the commonest opening in the game', () => {
+test('the whole face and the three-yard doorway are most of every opening', () => {
+  // THIS CHANGED, and the change is the finding. Before the wall family the
+  // 3 yd doorway led at 46% with the whole face second at 28%. The wall family
+  // is made of archetypes that leave whole SIDES open — one wall and three
+  // sides clear, a single pier, a lone corner — so the fully open face
+  // overtook it: 9 yd 36.6%, 3 yd 34.7%, and 6 yd went from 2.8% to 18.2%.
+  // The vocabulary got airier, which is what those archetypes are for.
   const width = new Map();
   for (const side of WALLS) {
     for (const [key, set] of serve.get(side)) {
@@ -138,9 +144,9 @@ test('three yards is the doorway: the commonest opening in the game', () => {
     }
   }
   const ranked = [...width.entries()].sort((a, b) => b[1] - a[1]);
-  assert.equal(ranked[0][0], 3, 'three yards leads');
-  assert.equal(ranked[1][0], SUB, 'then the whole face');
+  assert.deepEqual([ranked[0][0], ranked[1][0]].sort((a, b) => a - b), [3, SUB],
+    'the whole face and the 3 yd doorway lead, in some order');
   const total = [...width.values()].reduce((a, b) => a + b, 0);
   assert.ok((ranked[0][1] + ranked[1][1]) / total > 0.7,
-    'and between them they are three quarters of every opening in the game');
+    'and between them they are still three quarters of every opening');
 });

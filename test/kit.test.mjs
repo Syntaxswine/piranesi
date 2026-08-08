@@ -40,7 +40,7 @@ test('every block has a diversity key, arches included', () => {
   const arches = sheets.filter((s) => s.family === 'arch');
   const keys = new Set(arches.map((s) => s.f.seq));
   // 58 arches / 32 ideas before the wall family added six pier plans.
-  assert.equal(keys.size, 44, '92 arches are 44 distinct ideas');
+  assert.equal(keys.size, 48, '104 arches are 48 distinct ideas');
   assert.ok(keys.size > 12, 'and comfortably more than any arch quota will ask for');
   for (const a of arches) {
     for (const b of arches) {
@@ -52,7 +52,7 @@ test('every block has a diversity key, arches included', () => {
 test('a filter that names no constraint accepts everything', () => {
   assert.equal(sheets.filter((s) => matches(s, {})).length, sheets.length);
   // 58 before the wall family; six new plans are six new pier choices.
-  assert.equal(sheets.filter((s) => matches(s, { family: 'arch' })).length, 92);
+  assert.equal(sheets.filter((s) => matches(s, { family: 'arch' })).length, 104);
 });
 
 /* -------------------------------------------------------------- joinery */

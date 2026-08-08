@@ -14,28 +14,28 @@ happens here. See `js/recipe.js`.
 |---|---|---:|---|
 | `S:full,full,full:stone` | stack | 18 | -x@2,1.6 |
 | `A:yl:tee/3:stone` | arch | 28 | — |
-| `S:stub,wall-curve/2,bar:stone` | stack | 38 | -x@7,4.6 +y@2,4.6 |
-| `S:bar-wide,bar,bore:stone` | stack | 68 | — |
+| `S:stub,corners-two/1,bar:stone` | stack | 24 | — |
+| `S:twin,bar,bore:stone` | stack | 74 | +x@2,7.6 -y@2,7.6 -x@7,7.6 |
 | `A:x+:bar-wide/1:stone` | arch | 38 | +y@2,7.6 |
-| `S:frame,wall-curve/2,bar-wide/1:stone` | stack | 56 | -x@2,1.6 |
-| `S:quarters,rounded,stub/3:stone` | stack | 108 | +y@2,4.6 |
-| `S:ell-deep,wall-ell/1,corners-two/1:stone` | stack | 32 | -x@2,1.6 -y@2,4.6 -y@4.5,1.6 |
-| `S:wall-curve,bar-wide,notch:stone` | stack | 42 | +x@2,1.6 -y@2,1.6 |
+| `S:notch/2,twin/1,corners-two/1:stone` | stack | 34 | — |
+| `S:quarters,rounded,corners-side/3:stone` | stack | 114 | — |
+| `S:ell-deep,wall-tee/1,corner-small/3:stone` | stack | 48 | — |
+| `S:corners-two,bar-wide,wall:stone` | stack | 24 | -y@7,1.6 +x@4.5,4.6 -x@2,4.6 |
 | `A:y+:bar-wide:stone` | arch | 38 | +x@4.5,1.6 -x@4.5,1.6 -x@2,7.6 |
-| `S:ell-deep/1,wall,drum:stone` | stack | 32 | +x@2,1.6 |
-| `S:notch,wall/3,ell/1:stone` | stack | 24 | — |
+| `S:ell-deep/1,wall-ell,drum:stone` | stack | 38 | — |
+| `S:wall,wall-ell/3,ell/1:stone` | stack | 26 | +y@7,4.6 +y@7,7.6 +x@2,4.6 |
 | `A:x+:twin/1:stone` | arch | 44 | -y@4.5,7.6 -x@7,1.6 |
 | `A:x+:tee/2:stone` | arch | 44 | +x@4.5,1.6 -x@4.5,1.6 |
-| `S:wall-curve,wall/3,stub:stone` | stack | 38 | -y@7,1.6 +x@4.5,4.6 |
-| `S:tee,wall/3,quarters:stone` | stack | 74 | -y@2,7.6 +x@4.5,1.6 |
-| `S:notch/3,rounded,wall/3:stone` | stack | 62 | +x@2,4.6 +y@7,4.6 -x@7,1.6 |
-| `S:bar,drum,bore:stone` | stack | 80 | -y@2,7.6 +x@2,7.6 +y@7,7.6 |
+| `S:wall-ell/3,corners-side,corner-small:stone` | stack | 30 | -y@2,4.6 -x@7,4.6 |
+| `S:wall-ell/3,tee,quarters:stone` | stack | 80 | — |
+| `S:wall/3,rounded,wall-ell/3:stone` | stack | 64 | +x@2,1.6 -y@2,4.6 -y@4.5,7.6 |
+| `S:rounded,bar-wide,bore:stone` | stack | 108 | — |
 | `A:y+:quarters:stone` | arch | 88 | +x@7,1.6 |
-| `S:bore,wall/1,full:stone` | stack | 68 | -y@7,7.6 +x@7,1.6 |
-| `S:ell-deep/1,bar-wide/1,wall/2:stone` | stack | 20 | -x@2,7.6 |
+| `S:bore,wall-ell/1,full:stone` | stack | 74 | +y@4.5,7.6 +x@2,1.6 -x@7,1.6 |
+| `S:twin/1,wall-ell/2,bar:stone` | stack | 30 | +x@7,1.6 -x@2,1.6 |
 | `A:yr:twin:stone` | arch | 28 | +x@2,7.6 |
-| `S:rounded,wall/3,stub/3:stone` | stack | 58 | +x@2,1.6 -x@4.5,1.6 |
-| `S:shaft,ell/2,wall/3:stone` | stack | 74 | -y@7,7.6 |
+| `S:rounded,wall-ell/3,corners-side/3:stone` | stack | 70 | -x@2,1.6 |
+| `S:shaft,ell/2,wall-ell/3:stone` | stack | 80 | -x@4.5,4.6 |
 
 ## The grammar
 
