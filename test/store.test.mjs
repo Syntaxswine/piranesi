@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 
 import {
   Store, KEYS, OLD, bkey, readFile, blocksToFile, buildingToFile, buildingText,
-  slug, hashOf, ago, FORMAT,
+  slug, hashOf, ago, readView, FORMAT,
 } from '../js/store.js';
 import { describe as read, nameOf, shelfToText, shelfFromText } from '../js/naming.js';
 import { World, isIndexKey } from '../js/world.js';
@@ -818,6 +818,22 @@ test('the committed corpus of old saves still comes across', () => {
         data.anchors.length, `${file}: every choice found its bracket`);
     }
   }
+});
+
+test('a view is CLEANED before it reaches a camera', () => {
+  // The one field nothing else validates, and its numbers go straight into the
+  // projection: a string where a coordinate should be gives NaN through the
+  // camera and A BLANK PAGE, which is the exact symptom this project already
+  // has a scar about. Every field optional, every present field a real number.
+  assert.equal(readView(null), null);
+  assert.equal(readView('4,4'), null);
+  assert.equal(readView([4, 4]), null, 'an array is not a view');
+  assert.equal(readView({}), null, 'nothing usable in it is nothing');
+  assert.deepEqual(readView({ centre: ['4', 4], layer: 2 }), { layer: 2 },
+    'the bad field is dropped and the good one kept');
+  assert.deepEqual(readView({ centre: [4, 4, 9], yaw: NaN, zoom: Infinity }), { centre: [4, 4] });
+  assert.deepEqual(readView({ centre: [4.5, -2], layer: 0, yaw: 0.5, zoom: 1.5 }),
+    { centre: [4.5, -2], layer: 0, yaw: 0.5, zoom: 1.5 }, 'and a real one survives whole');
 });
 
 test('the view rides in the file as a hint and changes nothing about the world — BACKLOG 0t', () => {

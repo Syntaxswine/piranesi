@@ -696,6 +696,29 @@ function sameView(a, b) {
     && near((a.centre || [])[1], (b.centre || [])[1]);
 }
 
+/**
+ * A VIEW, OR NOTHING — and it is the one field nothing else validates.
+ *
+ * `view` is written by this code, so it is tempting to trust it. Its numbers go
+ * straight into the camera, and a hand-edited save or a hand-edited storage key
+ * with a string where a coordinate should be gives `state.centre = "4,4"`,
+ * arithmetic on a character, NaN through the projection and A BLANK PAGE — which
+ * is the exact symptom this project already has a scar about (`game.js` §1, the
+ * canvas measured at 28×320). Every field is optional; every field that is
+ * present must be a number that can be one.
+ */
+export function readView(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const num = (x) => (Number.isFinite(x) ? x : null);
+  const out = {};
+  if (Array.isArray(v.centre) && v.centre.length >= 2
+    && Number.isFinite(v.centre[0]) && Number.isFinite(v.centre[1])) {
+    out.centre = [v.centre[0], v.centre[1]];
+  }
+  for (const k of ['layer', 'yaw', 'zoom']) if (num(v[k]) != null) out[k] = v[k];
+  return Object.keys(out).length ? out : null;
+}
+
 /** "4 minutes ago". Short, because it is a list of buildings and not a log. */
 export function ago(iso, now = Date.now()) {
   if (!iso) return 'never saved';
@@ -835,8 +858,9 @@ export function readFile(text) {
       }
     }
     // The view rides out of the file separately, because it is not part of the
-    // world and must not reach `World.fromJSON`.
-    const view = data.view && typeof data.view === 'object' ? data.view : null;
+    // world and must not reach `World.fromJSON` — and it is CLEANED, because its
+    // numbers go straight into a camera.
+    const view = readView(data.view);
     if (!Array.isArray(data.palette)) return { kind: 'building', world: data, view, note: 'an older save with no palette' };
     return { kind: 'building', world: data, view };
   }

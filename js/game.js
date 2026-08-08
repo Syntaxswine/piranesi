@@ -23,7 +23,7 @@
 
 import { World } from './world.js';
 import { buildCatalog, blockFromRecipe, add } from './stack.js';
-import { Store, buildingToFile, readFile, ago, bkey, BPREFIX } from './store.js';
+import { Store, buildingToFile, readFile, readView, ago, bkey, BPREFIX } from './store.js';
 import { download, pickFile } from './files.js';
 import { describe } from './naming.js';
 import { SUB } from './cube.js';
@@ -641,6 +641,16 @@ function save() {
   buildings();
 }
 
+/** Take a cleaned view, field by field, keeping what this one does not say. */
+function useView(v) {
+  if (!v) return false;
+  if (v.centre) state.centre = v.centre.slice();
+  if (v.layer != null) state.layer = v.layer;
+  if (v.yaw != null) state.yaw = v.yaw;
+  if (v.zoom != null) state.zoom = v.zoom;
+  return true;
+}
+
 const currentView = () => ({
   centre: state.centre.slice(), layer: state.layer, yaw: state.yaw, zoom: state.zoom,
 });
@@ -717,12 +727,10 @@ function openBuilding(name) {
   state.conflict = false;
   store.setOpen(name);
   for (const p of store.drain()) note(p);
-  if (rec.view) {
-    state.centre = rec.view.centre ? rec.view.centre.slice() : state.centre;
-    state.layer = rec.view.layer ?? state.layer;
-    state.yaw = rec.view.yaw ?? state.yaw;
-    state.zoom = rec.view.zoom ?? state.zoom;
-  }
+  // CLEANED, not trusted. These numbers go straight into the camera, and a
+  // string where a coordinate should be gives NaN through the projection and a
+  // blank page — the exact symptom this file's §1 is a scar about.
+  useView(readView(rec.view));
   buildings();
   setLayer(state.layer);
   invalidate(0);
@@ -928,8 +936,14 @@ $('#importb').onclick = async () => {
   // saved. Asked before the file picker, not after, so the question is not
   // buried under a modal the player has already committed to.
   if (!okToLeave('Import a building')) return;
+  const was = unsaved();
   const picked = await pickFile();
   if (!picked) return;
+  // AND AGAIN IF IT CHANGED WHILE THE PICKER WAS OPEN — another tab can write
+  // the building in that gap, and the import is about to replace the world. Only
+  // re-asked when the answer would be different, so choosing a file does not
+  // normally cost two dialogs.
+  if (!was && !okToLeave('Import a building')) return;
   if (picked.error) return note(picked.error);
   const got = readFile(picked.text);
   if (got.kind === 'bad') return note(got.why);
@@ -968,13 +982,7 @@ $('#importb').onclick = async () => {
   state.lossy = (w.missing && w.missing.length) || 0;
   state.conflict = false;
   store.saveBuilding(name, got.world, got.view || null);
-  if (got.view) {
-    state.centre = Array.isArray(got.view.centre) ? got.view.centre.slice() : state.centre;
-    state.layer = Number.isFinite(got.view.layer) ? got.view.layer : state.layer;
-    state.yaw = Number.isFinite(got.view.yaw) ? got.view.yaw : state.yaw;
-    state.zoom = Number.isFinite(got.view.zoom) ? got.view.zoom : state.zoom;
-    setLayer(state.layer);
-  }
+  if (useView(got.view)) setLayer(state.layer);
   ids.length = 0; ids.push(...catalog.keys());
   shelf(); buildings(); invalidate(0);
   for (const p of store.drain()) note(p);

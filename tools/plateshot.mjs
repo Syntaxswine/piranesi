@@ -34,6 +34,7 @@ import { blockFromRecipe } from '../js/stack.js';
 import { buildScene, scenes, catalogFor } from '../js/scenes.js';
 import { World } from '../js/world.js';
 import { survey, fittingAt } from '../js/anchors.js';
+import { readView } from '../js/store.js';
 import { LAYER, standingOn } from '../js/build.js';
 import { Camera, DEG } from '../js/math.js';
 import { Engraver } from '../js/engrave.js';
@@ -93,7 +94,7 @@ if (has('--load')) {
       return m && { x: 0, y: 0, z: 0, rot: 0, size: [1, 1, 1], mesh: m, seedAt: s.p.map(Math.round), layer: 'fitting' };
     })
     .filter(Boolean);
-  hint = data.view && typeof data.view === 'object' ? data.view : null;
+  hint = readView(data.view);          // cleaned — its numbers go into a camera
   var catalog = cat;
 } else {
   catalog = catalogFor(sceneId, buildCatalog());
