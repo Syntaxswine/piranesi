@@ -689,7 +689,19 @@ function openBuilding(name) {
   // later write by another tab a conflict rather than a surprise.
   const rec = store.open(name);
   if (!rec) return false;
-  const w = World.fromJSON(catalog, rec.world, (r) => blockFromRecipe(r));
+  // WRAPPED, because this one runs at BOOT. The importer has had a try/catch
+  // since a bad file bricked the page; this path had none, and it is the one
+  // with no UI built yet to remove the building that threw. `readFile` cannot
+  // help here — a record already in storage never went through it.
+  let w;
+  try {
+    w = World.fromJSON(catalog, rec.world, (r) => blockFromRecipe(r));
+  } catch (err) {
+    note(`"${name}" will not load: ${err.message} — its record is untouched, export it before anything else`);
+    console.error('piranesi:', err);
+    return false;
+  }
+  if (w.oddAnchors) note(`${w.oddAnchors} anchor entr(y/ies) in "${name}" were not readable and were skipped`);
   state.lossy = (w.missing && w.missing.length) || 0;
   if (state.lossy) {
     note(`${w.missing.length} block(s) in "${name}" cannot be built by this version — it will not be saved over`);

@@ -820,6 +820,20 @@ export function readFile(text) {
     if (data.palette && !data.palette.every((r) => typeof r === 'string')) {
       return { kind: 'bad', why: "that file's palette is not a list of recipes" };
     }
+    // …AND THE ANCHORS, which is the same hole one field over. The cells are
+    // checked above because `World.fromJSON` destructures every row and one
+    // non-iterable throws a TypeError — and it destructures every ANCHOR row
+    // too, and nothing looked. A file can now carry them (`piranesi/4` keys them
+    // by geometry), so this is a live edge rather than a theoretical one.
+    if (data.anchors != null) {
+      if (!Array.isArray(data.anchors)) return { kind: 'bad', why: "that file's anchors are not a list" };
+      for (let i = 0; i < data.anchors.length; i++) {
+        const a = data.anchors[i];
+        if (!Array.isArray(a) || a.length < 2 || typeof a[0] !== 'string') {
+          return { kind: 'bad', why: `that file's anchor ${i} is not [site, kind] — it is ${JSON.stringify(a)}` };
+        }
+      }
+    }
     // The view rides out of the file separately, because it is not part of the
     // world and must not reach `World.fromJSON`.
     const view = data.view && typeof data.view === 'object' ? data.view : null;

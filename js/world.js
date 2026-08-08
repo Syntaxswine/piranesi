@@ -400,10 +400,19 @@ export class World {
     // site by its position in a generated list, and turning that back into a
     // place needs the block definitions — which is `anchors.js`'s business, not
     // the lattice's. `survey` does it at the one choke point nobody can forget.
+    // AND IT DOES NOT DESTRUCTURE WHAT IT HAS NOT LOOKED AT. `readFile` checks
+    // these rows now, but `readFile` is not on every path here: a record already
+    // in storage, a file handed to `plateshot`, or a hand-edited save all arrive
+    // straight at this loop. One non-iterable row used to throw a TypeError out
+    // of `fromJSON`, and `openBuilding` runs at BOOT with no UI yet built to
+    // remove the offending building — which is exactly the bricking the cell
+    // check was written to stop, one field over.
     w.indexed = 0;
-    for (const [id, kind] of data.anchors || []) {
-      w.anchors.set(id, kind);
-      if (isIndexKey(id)) w.indexed++;
+    w.oddAnchors = 0;
+    for (const a of Array.isArray(data.anchors) ? data.anchors : []) {
+      if (!Array.isArray(a) || a.length < 2 || typeof a[0] !== 'string') { w.oddAnchors++; continue; }
+      w.anchors.set(a[0], a[1]);
+      if (isIndexKey(a[0])) w.indexed++;
     }
     return w;
   }

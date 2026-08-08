@@ -606,6 +606,13 @@ test('a building file is refused before it can reach the loader', () => {
     ['{"palette":[],"cells":[[0,0,0]]}', /cell 0 is not/],
     ['{"palette":[],"cells":[["a",0,0,0]]}', /cell 0 is not/],
     ['{"palette":[1,2],"cells":[[0,0,0,0]]}', /palette is not a list of recipes/],
+    // THE SAME HOLE ONE FIELD OVER. `fromJSON` destructures every anchor row
+    // too, and nothing looked — so a file could throw a TypeError out of the
+    // loader, which is exactly what the cell check exists to stop.
+    ['{"palette":[],"cells":[],"anchors":5}', /anchors are not a list/],
+    ['{"palette":[],"cells":[],"anchors":[7]}', /anchor 0 is not \[site, kind\]/],
+    ['{"palette":[],"cells":[],"anchors":[["a"]]}', /anchor 0 is not/],
+    ['{"palette":[],"cells":[],"anchors":[[1,"torch"]]}', /anchor 0 is not/],
   ]) {
     const got = readFile(json);
     assert.equal(got.kind, 'bad', `${json} must be refused`);
@@ -613,6 +620,24 @@ test('a building file is refused before it can reach the loader', () => {
   }
   // …and the same version check does NOT refuse the format we write.
   assert.equal(readFile('{"format":"piranesi/3","palette":[],"cells":[]}').kind, 'building');
+});
+
+test('the LOADER survives an anchor row the reader never saw', () => {
+  // `readFile` is not on every path: a record already in storage, a file handed
+  // to `plateshot`, or a hand-edited save all arrive straight at `fromJSON`. It
+  // used to destructure every anchor row, so one non-iterable threw a TypeError
+  // — out of a function `openBuilding` calls at BOOT, before there is any UI to
+  // remove the building that threw. A bad row is counted and skipped now.
+  const cat = buildCatalog(4, 1);
+  const id = [...cat.keys()][0];
+  const w = World.fromJSON(cat, {
+    format: 'piranesi/4', palette: [id], cells: [[0, 0, 0, 0]],
+    anchors: [7, null, ['structure|0,0,0#+x@4.5,1.6', 'torch'], ['no-kind'], [5, 'ring']],
+  }, (r) => blockFromRecipe(r));
+  assert.equal(w.size, 1);
+  assert.equal(w.oddAnchors, 4, 'four rows unreadable, and it says so rather than throwing');
+  assert.equal(w.anchors.size, 1, 'and the one good row survived');
+  assert.equal(w.anchors.get('structure|0,0,0#+x@4.5,1.6'), 'torch');
 });
 
 test('loading a building with two blocks in one cell says which it lost', () => {
