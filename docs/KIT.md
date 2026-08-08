@@ -13,12 +13,12 @@ times. These are picked to work **together** — see `js/kit.js`.
 
 | | |
 |---|---|
-| meets another block in the kit on all 4 walls | **82 of 100** |
-| mean walls met, of 4 | **3.78** |
+| meets another block in the kit on all 4 walls | **90 of 100** |
+| mean walls met, of 4 | **3.87** |
 | blocks meeting nothing else in the kit | **0** |
 | joinery graph components | **1** (largest 100) |
-| distinct wall patterns in the kit | 55 |
-| anchor sites for chains and rings | 190 |
+| distinct wall patterns in the kit | 49 |
+| anchor sites for chains and rings | 189 |
 | blocks with a sealed chamber | 0 |
 
 One component means every block can be reached from every other by setting
@@ -35,6 +35,40 @@ that looks fine block by block and cannot build one building.
 | light wells in a row | ✅ | `A:x+:drum:stone` + `A:x+:drum:stone` |
 | stack one on another | ✅ | `S:full,full,full:stone` + `S:full,full,full:stone` |
 | a wall with anchors | ✅ | `S:full,full,full:stone` + `S:full,full,full:stone` |
+
+### The blocks still short of four walls, and why
+
+BACKLOG 0p asked why 17 edge words instead of 15 took this from 96 of 100 to
+82. The answer is that the quotas were innocent: **the greedy pass maximises a
+marginal gain and never goes back**, and whether a block's own walls end up
+answered is a fact about the other ninety-nine that no per-candidate score can
+see — the same shape of finding as connectivity and as the vertical. A third
+repair pass took it to
+**90**. What is left is reported rather than rounded off:
+
+| block | role | walls | what stopped it |
+|---|---|---:|---|
+| `S:wall-curve,ell/1,ell-deep/1:stone` | stair-well | 2/4 | **nothing in the grammar** can take its role and be flush |
+| `S:bar,bar,wall/2:stone` | bridge | 2/4 | 317 same-role candidates; 64 would split the kit, 0 would unground a block |
+| `S:corner,notch/1,wall-tee:stone` | lift | 2/4 | 318 same-role candidates; 0 would split the kit, 64 would unground a block |
+| `A:x+:stub/2:stone` | barrel-vault | 3/4 | **nothing in the grammar** can take its role and be flush |
+| `A:x+:corner-small/2:stone` | barrel-vault | 3/4 | **nothing in the grammar** can take its role and be flush |
+| `A:x+:wall/2:stone` | barrel-vault | 3/4 | **nothing in the grammar** can take its role and be flush |
+| `A:x+:corners-side/1:stone` | barrel-vault | 3/4 | **nothing in the grammar** can take its role and be flush |
+| `S:wall-ell,twin,notch/3:stone` | stair-well | 3/4 | **nothing in the grammar** can take its role and be flush |
+| `S:notch,bore,shaft:stone` | corbel | 3/4 | **nothing in the grammar** can take its role and be flush |
+| `S:wall-tee,wall,wall-tee:stone` | free-pier | 3/4 | **nothing in the grammar** can take its role and be flush |
+
+The ones with no candidate at all are a finding about the VOCABULARY, not
+about the pick — and four of them are arches, which is BACKLOG 0f in another
+costume: a vault runs but it cannot land, so its spandrel wall is met by
+almost nothing. A springer would close those four and nothing else will.
+
+**And the cost, said out loud.** Every swap trades an odd wall for a common
+one, so distinct wall patterns in the kit fell from 55 to 49: eight more
+blocks fully flush, six fewer kinds of seam. That is the right trade for a kit
+whose job is to tile — but it is a trade, and a pass that reported only the
+number it was optimising would have hidden it.
 
 ## What is in it
 
@@ -59,33 +93,33 @@ that looks fine block by block and cannot build one building.
 | pinned | 1 |
 | bridge | 1 |
 
-**Plans used**, of the 16 in the vocabulary — a plan appearing nowhere means
+**Plans used**, of the 24 in the vocabulary — a plan appearing nowhere means
 the kit cannot make anything that shape.
 
 | plan | blocks using it |
 |---|---:|
-| `full` | 42 |
-| `shaft` | 31 |
-| `frame` | 29 |
-| `twin` | 24 |
+| `full` | 43 |
+| `shaft` | 32 |
+| `frame` | 30 |
+| `twin` | 22 |
+| `rounded` | 20 |
 | `ell` | 20 |
-| `rounded` | 19 |
-| `notch` | 19 |
-| `corner` | 19 |
+| `corner` | 20 |
+| `notch` | 17 |
 | `drum` | 10 |
-| `bar` | 9 |
 | `tee` | 9 |
-| `wall` | 8 |
-| `corner-small` | 6 |
+| `bar` | 8 |
+| `wall-curve` | 7 |
+| `wall` | 7 |
 | `bore` | 6 |
 | `stub` | 6 |
-| `ell-deep` | 5 |
-| `wall-curve` | 5 |
+| `corner-small` | 5 |
+| `cross` | 5 |
 | `wall-ell` | 4 |
-| `wall-tee` | 4 |
-| `cross` | 4 |
+| `ell-deep` | 4 |
+| `corners-side` | 4 |
 | `corners-two` | 3 |
-| `corners-side` | 3 |
+| `wall-tee` | 3 |
 
 ## The hundred
 
@@ -94,8 +128,8 @@ anywhere in the grammar. `ways` counts roofed passages.
 
 | # | recipe | role | score | kit | all | ways | anchors | mass |
 |---:|---|---|---:|---:|---:|---:|---:|---:|
-| 1 | `S:corner,shaft,wall-curve:stone` | lift | 0.748 | 3/4 | 4/4 | 3 | 3 | 60% |
-| 2 | `S:corner,wall-curve,wall-ell:stone` | corner-bridge | 0.738 | 2/4 | 4/4 | 3 | 3 | 49% |
+| 1 | `S:corner,shaft,wall-curve:stone` | lift | 0.748 | 4/4 | 4/4 | 3 | 3 | 60% |
+| 2 | `S:corner,frame,wall-curve:stone` | corner-bridge | 0.741 | 4/4 | 4/4 | 3 | 3 | 53% |
 | 3 | `S:wall,ell/1,ell-deep/1:stone` | topup | 0.716 | 4/4 | 4/4 | 3 | 2 | 67% |
 | 4 | `S:notch,frame,notch:stone` | topup | 0.707 | 4/4 | 4/4 | 1 | 2 | 82% |
 | 5 | `S:stub,frame,stub:stone` | lift | 0.705 | 4/4 | 4/4 | 3 | 2 | 30% |
@@ -109,23 +143,23 @@ anywhere in the grammar. `ways` counts roofed passages.
 | 13 | `S:corner-small,frame,shaft:stone` | topup | 0.682 | 4/4 | 4/4 | 3 | 3 | 56% |
 | 14 | `S:wall-ell,twin,notch/3:stone` | stair-well | 0.680 | 3/4 | 4/4 | 2 | 2 | 70% |
 | 15 | `S:drum,frame,shaft:stone` | shaft-well | 0.676 | 4/4 | 4/4 | 3 | 1 | 58% |
-| 16 | `S:corner,shaft,corners-side/1:stone` | lift | 0.675 | 3/4 | 4/4 | 3 | 3 | 47% |
-| 17 | `S:corner-small,ell/2,ell-deep/2:stone` | topup | 0.670 | 4/4 | 4/4 | 3 | 1 | 60% |
-| 18 | `S:wall,notch/3,notch/3:stone` | topup | 0.665 | 3/4 | 4/4 | 2 | 3 | 70% |
-| 19 | `S:wall-tee,ell,ell-deep:stone` | topup | 0.662 | 3/4 | 4/4 | 3 | 3 | 71% |
-| 20 | `S:wall-curve,wall-ell,wall-curve:stone` | topup | 0.657 | 4/4 | 4/4 | 1 | 2 | 59% |
-| 21 | `S:rounded,rounded,rounded:stone` | through-storey | 0.656 | 4/4 | 4/4 | 0 | 3 | 100% |
-| 22 | `S:full,full,rounded:stone` | through-storey | 0.656 | 4/4 | 4/4 | 0 | 3 | 100% |
-| 23 | `S:full,rounded,rounded:stone` | through-storey | 0.656 | 4/4 | 4/4 | 0 | 2 | 100% |
-| 24 | `S:full,rounded,full:stone` | through-storey | 0.656 | 4/4 | 4/4 | 0 | 2 | 100% |
-| 25 | `S:rounded,full,rounded:stone` | through-storey | 0.656 | 4/4 | 4/4 | 0 | 2 | 100% |
-| 26 | `S:rounded,full,full:stone` | through-storey | 0.656 | 4/4 | 4/4 | 0 | 3 | 100% |
-| 27 | `S:frame,twin,shaft:stone` | stair-well | 0.656 | 4/4 | 4/4 | 2 | 2 | 75% |
-| 28 | `S:corner-small,twin/1,notch:stone` | topup | 0.656 | 3/4 | 4/4 | 3 | 1 | 56% |
-| 29 | `S:ell,twin,ell:stone` | stair-well | 0.654 | 4/4 | 4/4 | 2 | 2 | 76% |
-| 30 | `S:shaft,frame,frame:stone` | topup | 0.652 | 4/4 | 4/4 | 1 | 1 | 76% |
-| 31 | `S:frame,frame,frame:stone` | court | 0.652 | 4/4 | 4/4 | 1 | 1 | 69% |
-| 32 | `S:corners-side,full,notch/3:stone` | topup | 0.651 | 4/4 | 4/4 | 2 | 2 | 70% |
+| 16 | `S:corner,shaft,corners-side/1:stone` | lift | 0.675 | 4/4 | 4/4 | 3 | 3 | 47% |
+| 17 | `S:corner,frame,corners-side:stone` | topup | 0.674 | 4/4 | 4/4 | 3 | 3 | 41% |
+| 18 | `S:corner-small,ell/2,ell-deep/2:stone` | topup | 0.670 | 4/4 | 4/4 | 3 | 1 | 60% |
+| 19 | `S:wall-curve,wall-ell,wall-curve:stone` | topup | 0.657 | 4/4 | 4/4 | 1 | 2 | 59% |
+| 20 | `S:rounded,rounded,rounded:stone` | through-storey | 0.656 | 4/4 | 4/4 | 0 | 3 | 100% |
+| 21 | `S:full,full,rounded:stone` | through-storey | 0.656 | 4/4 | 4/4 | 0 | 3 | 100% |
+| 22 | `S:full,rounded,rounded:stone` | through-storey | 0.656 | 4/4 | 4/4 | 0 | 2 | 100% |
+| 23 | `S:full,rounded,full:stone` | through-storey | 0.656 | 4/4 | 4/4 | 0 | 2 | 100% |
+| 24 | `S:rounded,full,rounded:stone` | through-storey | 0.656 | 4/4 | 4/4 | 0 | 2 | 100% |
+| 25 | `S:rounded,full,full:stone` | through-storey | 0.656 | 4/4 | 4/4 | 0 | 3 | 100% |
+| 26 | `S:frame,twin,shaft:stone` | stair-well | 0.656 | 4/4 | 4/4 | 2 | 2 | 75% |
+| 27 | `S:ell,twin,ell:stone` | stair-well | 0.654 | 4/4 | 4/4 | 2 | 2 | 76% |
+| 28 | `S:corner,rounded,wall-curve:stone` | topup | 0.653 | 4/4 | 4/4 | 2 | 3 | 64% |
+| 29 | `S:shaft,frame,frame:stone` | topup | 0.652 | 4/4 | 4/4 | 1 | 1 | 76% |
+| 30 | `S:frame,frame,frame:stone` | court | 0.652 | 4/4 | 4/4 | 1 | 1 | 69% |
+| 31 | `S:corners-side,full,notch/3:stone` | topup | 0.651 | 4/4 | 4/4 | 2 | 2 | 70% |
+| 32 | `S:ell,shaft,wall-ell/2:stone` | topup | 0.648 | 4/4 | 4/4 | 1 | 2 | 75% |
 | 33 | `S:ell,notch/1,ell:stone` | ell-bridge | 0.642 | 4/4 | 4/4 | 1 | 3 | 83% |
 | 34 | `S:corners-side,frame,notch/3:stone` | topup | 0.640 | 4/4 | 4/4 | 2 | 3 | 60% |
 | 35 | `S:ell,shaft,ell:stone` | ell-bridge | 0.638 | 4/4 | 4/4 | 1 | 2 | 83% |
@@ -138,61 +172,61 @@ anywhere in the grammar. `ways` counts roofed passages.
 | 42 | `S:drum,notch,full:stone` | crossing | 0.617 | 4/4 | 4/4 | 2 | 2 | 68% |
 | 43 | `S:drum,frame,drum:stone` | lift | 0.608 | 4/4 | 4/4 | 3 | 3 | 34% |
 | 44 | `S:shaft,full,frame:stone` | solid-mass | 0.608 | 4/4 | 4/4 | 0 | 2 | 86% |
-| 45 | `S:full,twin,rounded:stone` | through-storey | 0.605 | 4/4 | 4/4 | 1 | 3 | 89% |
-| 46 | `S:full,twin,full:stone` | gate | 0.605 | 4/4 | 4/4 | 1 | 2 | 89% |
-| 47 | `S:wall-ell,ell/3,ell-deep/3:stone` | stair-well | 0.602 | 4/4 | 4/4 | 2 | 1 | 75% |
-| 48 | `S:full,frame,shaft:stone` | solid-mass | 0.598 | 4/4 | 4/4 | 0 | 2 | 86% |
-| 49 | `S:full,full,full:stone` | pinned | 0.596 | 4/4 | 4/4 | 0 | 1 | 100% |
-| 50 | `S:frame,shaft,full:stone` | solid-mass | 0.592 | 4/4 | 4/4 | 0 | 3 | 86% |
-| 51 | `S:full,notch,full:stone` | through-storey | 0.591 | 4/4 | 4/4 | 0 | 3 | 96% |
-| 52 | `S:corner-small,notch/1,full:stone` | crossing | 0.588 | 4/4 | 4/4 | 2 | 3 | 67% |
-| 53 | `S:corner,shaft,corners-two/1:stone` | lift | 0.585 | 3/4 | 4/4 | 3 | 3 | 47% |
-| 54 | `S:twin,shaft,twin:stone` | vault-dock | 0.583 | 4/4 | 4/4 | 1 | 3 | 74% |
-| 55 | `S:corner,corner,corner:stone` | free-pier | 0.577 | 4/4 | 4/4 | 1 | 2 | 31% |
-| 56 | `S:wall,shaft,full:stone` | gate | 0.575 | 4/4 | 4/4 | 1 | 2 | 74% |
-| 57 | `S:corners-two,shaft,full:stone` | crossing | 0.575 | 4/4 | 4/4 | 2 | 3 | 70% |
-| 58 | `S:wall-tee,wall,wall-tee:stone` | free-pier | 0.569 | 3/4 | 4/4 | 1 | 2 | 40% |
-| 59 | `S:notch,bore,shaft:stone` | corbel | 0.568 | 3/4 | 4/4 | 3 | 3 | 67% |
-| 60 | `S:shaft,twin,rounded:stone` | gate | 0.567 | 4/4 | 4/4 | 1 | 3 | 85% |
-| 61 | `S:shaft,twin,full:stone` | gate | 0.567 | 4/4 | 4/4 | 1 | 2 | 85% |
-| 62 | `S:corners-two,frame,full:stone` | crossing | 0.564 | 4/4 | 4/4 | 2 | 2 | 64% |
-| 63 | `S:corner,twin/1,corner:stone` | corner-bridge | 0.561 | 3/4 | 4/4 | 2 | 3 | 43% |
+| 45 | `S:corner,notch/2,wall-curve:stone` | corner-bridge | 0.605 | 4/4 | 4/4 | 2 | 2 | 60% |
+| 46 | `S:full,twin,rounded:stone` | through-storey | 0.605 | 4/4 | 4/4 | 1 | 3 | 89% |
+| 47 | `S:full,twin,full:stone` | gate | 0.605 | 4/4 | 4/4 | 1 | 2 | 89% |
+| 48 | `S:wall-ell,ell/3,ell-deep/3:stone` | stair-well | 0.602 | 4/4 | 4/4 | 2 | 1 | 75% |
+| 49 | `S:full,frame,shaft:stone` | solid-mass | 0.598 | 4/4 | 4/4 | 0 | 2 | 86% |
+| 50 | `S:full,full,full:stone` | pinned | 0.596 | 4/4 | 4/4 | 0 | 1 | 100% |
+| 51 | `S:frame,shaft,full:stone` | solid-mass | 0.592 | 4/4 | 4/4 | 0 | 3 | 86% |
+| 52 | `S:full,notch,full:stone` | through-storey | 0.591 | 4/4 | 4/4 | 0 | 3 | 96% |
+| 53 | `S:corner-small,notch/1,full:stone` | crossing | 0.588 | 4/4 | 4/4 | 2 | 3 | 67% |
+| 54 | `S:corner,shaft,corners-two/1:stone` | lift | 0.585 | 4/4 | 4/4 | 3 | 3 | 47% |
+| 55 | `S:twin,shaft,twin:stone` | vault-dock | 0.583 | 4/4 | 4/4 | 1 | 3 | 74% |
+| 56 | `S:corner,corner,corner:stone` | free-pier | 0.577 | 4/4 | 4/4 | 1 | 2 | 31% |
+| 57 | `S:wall,shaft,full:stone` | gate | 0.575 | 4/4 | 4/4 | 1 | 2 | 74% |
+| 58 | `S:corners-two,shaft,full:stone` | crossing | 0.575 | 4/4 | 4/4 | 2 | 3 | 70% |
+| 59 | `S:wall-tee,wall,wall-tee:stone` | free-pier | 0.569 | 3/4 | 4/4 | 1 | 2 | 40% |
+| 60 | `S:notch,bore,shaft:stone` | corbel | 0.568 | 3/4 | 4/4 | 3 | 3 | 67% |
+| 61 | `S:shaft,twin,rounded:stone` | gate | 0.567 | 4/4 | 4/4 | 1 | 3 | 85% |
+| 62 | `S:shaft,twin,full:stone` | gate | 0.567 | 4/4 | 4/4 | 1 | 2 | 85% |
+| 63 | `S:corners-two,frame,full:stone` | crossing | 0.564 | 4/4 | 4/4 | 2 | 2 | 64% |
 | 64 | `S:frame,twin,rounded:stone` | gate | 0.555 | 4/4 | 4/4 | 1 | 2 | 79% |
 | 65 | `S:ell,full,ell:stone` | ell-bridge | 0.554 | 4/4 | 4/4 | 0 | 2 | 87% |
 | 66 | `S:tee,tee,tee:stone` | open-register | 0.553 | 4/4 | 4/4 | 1 | 2 | 44% |
 | 67 | `S:stub,stub,stub:stone` | free-pier | 0.551 | 4/4 | 4/4 | 1 | 1 | 11% |
 | 68 | `S:wall,twin/1,full:stone` | crossing | 0.550 | 4/4 | 4/4 | 2 | 2 | 67% |
-| 69 | `S:bar,frame,cross:stone` | lift | 0.549 | 2/4 | 4/4 | 3 | 3 | 53% |
-| 70 | `S:corner,full,corner:stone` | corner-bridge | 0.549 | 4/4 | 4/4 | 2 | 1 | 54% |
-| 71 | `S:rounded,twin,rounded:stone` | gate | 0.545 | 4/4 | 4/4 | 1 | 1 | 89% |
-| 72 | `S:ell,ell,ell:stone` | ell-bridge | 0.543 | 4/4 | 4/4 | 1 | 0 | 80% |
-| 73 | `S:rounded,rounded,full:stone` | through-storey | 0.536 | 4/4 | 4/4 | 0 | 0 | 100% |
-| 74 | `S:tee,bar,tee:stone` | open-register | 0.533 | 4/4 | 4/4 | 1 | 2 | 41% |
-| 75 | `S:wall-curve,ell/1,ell-deep/1:stone` | stair-well | 0.531 | 4/4 | 4/4 | 2 | 0 | 77% |
-| 76 | `S:shaft,bore,shaft:stone` | corbel | 0.522 | 4/4 | 4/4 | 3 | 1 | 67% |
-| 77 | `S:full,bore,full:stone` | corbel | 0.520 | 4/4 | 4/4 | 2 | 3 | 75% |
-| 78 | `S:wall,shaft,rounded:stone` | gate | 0.515 | 4/4 | 4/4 | 1 | 1 | 74% |
-| 79 | `S:ell,bore,ell:stone` | ell-bridge | 0.514 | 4/4 | 4/4 | 3 | 0 | 62% |
-| 80 | `S:twin,notch,twin:stone` | vault-dock | 0.504 | 4/4 | 4/4 | 1 | 2 | 74% |
-| 81 | `S:ell,frame,ell:stone` | ell-bridge | 0.502 | 4/4 | 4/4 | 1 | 0 | 77% |
-| 82 | `S:tee,stub,tee:stone` | open-register | 0.497 | 4/4 | 4/4 | 2 | 1 | 33% |
-| 83 | `S:rounded,twin,full:stone` | gate | 0.485 | 4/4 | 4/4 | 1 | 0 | 89% |
-| 84 | `S:shaft,bore,full:stone` | corbel | 0.482 | 4/4 | 4/4 | 2 | 2 | 71% |
-| 85 | `S:tee,drum,tee:stone` | open-register | 0.481 | 4/4 | 4/4 | 1 | 3 | 35% |
-| 86 | `S:wall,notch,full:stone` | gate | 0.472 | 4/4 | 4/4 | 1 | 1 | 74% |
-| 87 | `A:x+:drum:stone` | barrel-vault | 0.471 | 4/4 | 4/4 | 2 | 3 | 21% |
-| 88 | `A:x+:wall/2:stone` | barrel-vault | 0.465 | 3/4 | 4/4 | 2 | 2 | 31% |
-| 89 | `A:x+:stub/2:stone` | barrel-vault | 0.464 | 3/4 | 4/4 | 2 | 2 | 19% |
-| 90 | `A:x+:corner-small/2:stone` | barrel-vault | 0.464 | 3/4 | 4/4 | 2 | 3 | 19% |
-| 91 | `S:bar,bar,wall/2:stone` | bridge | 0.461 | 2/4 | 4/4 | 2 | 2 | 33% |
-| 92 | `S:bar,bar,bar:stone` | free-pier | 0.456 | 4/4 | 4/4 | 1 | 1 | 33% |
-| 93 | `S:twin,frame,twin:stone` | vault-dock | 0.454 | 4/4 | 4/4 | 1 | 0 | 67% |
-| 94 | `S:twin,full,twin:stone` | vault-dock | 0.454 | 4/4 | 4/4 | 1 | 0 | 78% |
-| 95 | `S:bar,drum,bar:stone` | open-register | 0.451 | 4/4 | 4/4 | 1 | 2 | 28% |
-| 96 | `S:full,bore,shaft:stone` | corbel | 0.429 | 4/4 | 4/4 | 2 | 1 | 71% |
-| 97 | `S:drum,drum,drum:stone` | free-pier | 0.418 | 4/4 | 4/4 | 1 | 0 | 16% |
-| 98 | `A:x+:corners-side/1:stone` | barrel-vault | 0.404 | 3/4 | 4/4 | 2 | 1 | 25% |
-| 99 | `S:twin,twin/1,twin:stone` | vault-dock | 0.320 | 4/4 | 4/4 | 1 | 0 | 67% |
+| 69 | `S:corner,full,corner:stone` | corner-bridge | 0.549 | 4/4 | 4/4 | 2 | 1 | 54% |
+| 70 | `S:rounded,twin,rounded:stone` | gate | 0.545 | 4/4 | 4/4 | 1 | 1 | 89% |
+| 71 | `S:ell,ell,ell:stone` | ell-bridge | 0.543 | 4/4 | 4/4 | 1 | 0 | 80% |
+| 72 | `S:rounded,rounded,full:stone` | through-storey | 0.536 | 4/4 | 4/4 | 0 | 0 | 100% |
+| 73 | `S:tee,bar,tee:stone` | open-register | 0.533 | 4/4 | 4/4 | 1 | 2 | 41% |
+| 74 | `S:wall-curve,ell/1,ell-deep/1:stone` | stair-well | 0.531 | 2/4 | 4/4 | 2 | 0 | 77% |
+| 75 | `S:shaft,bore,shaft:stone` | corbel | 0.522 | 4/4 | 4/4 | 3 | 1 | 67% |
+| 76 | `S:full,bore,full:stone` | corbel | 0.520 | 4/4 | 4/4 | 2 | 3 | 75% |
+| 77 | `S:wall,shaft,rounded:stone` | gate | 0.515 | 4/4 | 4/4 | 1 | 1 | 74% |
+| 78 | `S:ell,bore,ell:stone` | ell-bridge | 0.514 | 4/4 | 4/4 | 3 | 0 | 62% |
+| 79 | `S:twin,notch,twin:stone` | vault-dock | 0.504 | 4/4 | 4/4 | 1 | 2 | 74% |
+| 80 | `S:ell,frame,ell:stone` | ell-bridge | 0.502 | 4/4 | 4/4 | 1 | 0 | 77% |
+| 81 | `S:tee,stub,tee:stone` | open-register | 0.497 | 4/4 | 4/4 | 2 | 1 | 33% |
+| 82 | `S:rounded,twin,full:stone` | gate | 0.485 | 4/4 | 4/4 | 1 | 0 | 89% |
+| 83 | `S:shaft,bore,full:stone` | corbel | 0.482 | 4/4 | 4/4 | 2 | 2 | 71% |
+| 84 | `S:tee,drum,tee:stone` | open-register | 0.481 | 4/4 | 4/4 | 1 | 3 | 35% |
+| 85 | `S:wall,notch,full:stone` | gate | 0.472 | 4/4 | 4/4 | 1 | 1 | 74% |
+| 86 | `A:x+:drum:stone` | barrel-vault | 0.471 | 4/4 | 4/4 | 2 | 3 | 21% |
+| 87 | `A:x+:wall/2:stone` | barrel-vault | 0.465 | 3/4 | 4/4 | 2 | 2 | 31% |
+| 88 | `A:x+:stub/2:stone` | barrel-vault | 0.464 | 3/4 | 4/4 | 2 | 2 | 19% |
+| 89 | `A:x+:corner-small/2:stone` | barrel-vault | 0.464 | 3/4 | 4/4 | 2 | 3 | 19% |
+| 90 | `S:bar,bar,wall/2:stone` | bridge | 0.461 | 2/4 | 4/4 | 2 | 2 | 33% |
+| 91 | `S:bar,bar,bar:stone` | free-pier | 0.456 | 4/4 | 4/4 | 1 | 1 | 33% |
+| 92 | `S:twin,frame,twin:stone` | vault-dock | 0.454 | 4/4 | 4/4 | 1 | 0 | 67% |
+| 93 | `S:twin,full,twin:stone` | vault-dock | 0.454 | 4/4 | 4/4 | 1 | 0 | 78% |
+| 94 | `S:bar,drum,bar:stone` | open-register | 0.451 | 4/4 | 4/4 | 1 | 2 | 28% |
+| 95 | `S:full,bore,shaft:stone` | corbel | 0.429 | 4/4 | 4/4 | 2 | 1 | 71% |
+| 96 | `S:drum,drum,drum:stone` | free-pier | 0.418 | 4/4 | 4/4 | 1 | 0 | 16% |
+| 97 | `A:x+:corners-side/1:stone` | barrel-vault | 0.404 | 3/4 | 4/4 | 2 | 1 | 25% |
+| 98 | `S:twin,twin/1,twin:stone` | vault-dock | 0.320 | 4/4 | 4/4 | 1 | 0 | 67% |
+| 99 | `S:cross,full,cross:stone` | lift | 0.305 | 4/4 | 4/4 | 0 | 2 | 70% |
 | 100 | `S:cross,cross,cross:stone` | open-register | 0.302 | 4/4 | 4/4 | 1 | 0 | 56% |
 
 ```bash

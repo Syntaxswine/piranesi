@@ -320,6 +320,47 @@
 > save was photographing a different building from the one in the file — and
 > `readFile` now carries the view out separately rather than letting it into the
 > world.
+>
+> ~~**0r. The kit spec's role filters cannot see the D: family.**~~ — **DONE, and
+> it was worse than 0r said.** A drawn block has no plans, so every drawn block
+> shared the EMPTY DIVERSITY KEY and a kit could hold exactly one of them however
+> many were on the shelf — the same collapse `featuresOf`'s own comment records
+> for the 58 arches, happening again to a second family. Measured on a shelf of
+> seven: 1 distinct key before, 7 after. And a storey now says WHICH PLAN IT IS,
+> measured rather than mapped: `drawn.js planOfLayer` compares board forms —
+> cells, corners, disc — against every plan in every turn, so `usesPlans:
+> ['bore']` keeps meaning what it says and a storey that is nothing in the
+> vocabulary answers nothing. All 24 plans, all 4 turns: drawn == named AND
+> identifies back. The table of how the board draws each curved plan moved out of
+> the test and into `drawn.js CURVED`, where production and test read the same
+> one. Found on the way: `encodeLayer` re-emitted a drum's nine cells as
+> rectangles beside the `*d`, so a layer that came from the READER encoded to a
+> recipe that will not decode — latent, because `adopt` rebuilds from `rects`.
+>
+> ~~**0p. Re-tune `docs/kit-spec.json` for the wider vocabulary.**~~ — **DONE,
+> and the quotas were innocent.** The reading that 17 edge words had outgrown a
+> hundred blocks was wrong. Measured one block at a time: of the 18 short of four
+> walls, **15 had a replacement satisfying the same role filter that was flush on
+> all four**, and the unmet words were not rare — four had over 600 partners in
+> the grammar apiece, one had 1,218. The kit just did not happen to contain any of
+> them, because **the greedy pass maximises a marginal gain and never goes back**.
+> Same shape as connectivity and the vertical, so it gets the same treatment: a
+> third repair pass, `js/kit.js repairFlush`, last of the three because a swap
+> that raised flushness while stranding an island or ungrounding a block would
+> trade the number nobody looks at for the two that matter. **82 → 90 of 100**,
+> mean 3.78 → 3.87, still one component, still 6/6 build tests, `assemble` still
+> 62/62 exact.
+>
+> Two things it taught, both recorded in `docs/KIT.md` rather than in a commit
+> message. **A swap must pay its debts**: taking a block out takes its walls out
+> too, and the first version — swap for the best-scoring flush candidate — gained
+> four and stalled, because a block that was the sole answer to somebody else's
+> side leaves that side unanswered. Requiring the replacement to provide every
+> socket the outgoing block was the sole provider of is what unstuck it. And **the
+> cost is stated**: distinct wall patterns fell 55 → 49, so it is eight more
+> flush blocks for six fewer kinds of seam. Of the ten still short, eight have no
+> same-role candidate in the whole grammar and four of those are arches — which is
+> **0f in another costume**, and a springer is the only thing that will close them.
 
 Ranked by how much Carceri each buys. Sources are five research briefs
 (etching craft, a census of the sixteen plates, the spatial scholarship, the NPR

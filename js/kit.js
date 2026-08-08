@@ -504,6 +504,160 @@ function surplus(kit, spec, sh) {
  * pass reported success. The quota is a PREFERENCE; a kit that cannot be built
  * is worse than a kit one short of a role.
  */
+/* ---------------------------------------------------- and the third pass -- */
+
+/** How many of a block's four walls something ELSE in `list` answers. Local,
+ *  non-mutating: `joinery` writes `flush` onto the sheet, and these sheets are
+ *  carrying their whole-grammar numbers. */
+export function wallsMet(sh, list) {
+  let n = 0;
+  for (const k of socketsOf(sh).own) {
+    const [side, pat] = split(k);
+    const want = `${OPPOSITE[side]}|${pat}`;
+    if (list.some((o) => o !== sh && socketsOf(o).set.has(want))) n++;
+  }
+  return n;
+}
+
+const fullyFlush = (list) => list.reduce((n, s) => n + (wallsMet(s, list) === 4 ? 1 : 0), 0);
+
+/** Every socket the whole of `list` can present, in any turn. One Set, so
+ *  screening seventeen thousand candidates is four lookups apiece instead of
+ *  four hundred — which is the difference between this pass running and not. */
+const answersOf = (list) => {
+  const out = new Set();
+  for (const o of list) for (const k of socketsOf(o).set) out.add(k);
+  return out;
+};
+
+/** …and how many of a candidate's four walls that Set answers. Only valid for a
+ *  block that is NOT in the list, which is exactly the screening case: a block
+ *  may not meet itself, and this cannot tell. */
+const wallsAnswered = (sh, answers) => socketsOf(sh).own.reduce((n, k) => {
+  const [side, pat] = split(k);
+  return n + (answers.has(`${OPPOSITE[side]}|${pat}`) ? 1 : 0);
+}, 0);
+
+/**
+ * MAKE THE WALLS MEET, and this is BACKLOG 0p answered by measurement rather
+ * than by arguing with the quotas.
+ *
+ * Going from 15 edge words to 17 took the hundred from 96 of 100 fully flush to
+ * 82, and the obvious reading is that the vocabulary outgrew the kit. It did
+ * not. Measured, one block at a time: of the 18 blocks short of four walls, 15
+ * have a replacement satisfying THE SAME ROLE FILTER that is flush on all four
+ * against the other ninety-nine — and the unmet words are not rare ones. Four
+ * of them have over 600 partners in the grammar apiece; one has 1,218. The kit
+ * simply does not happen to contain any of them.
+ *
+ * So it is the same shape of finding as connectivity and as the vertical: the
+ * greedy pass maximises a MARGINAL gain and never goes back, and whether a
+ * block's own walls end up answered is a fact about the other ninety-nine that
+ * no per-candidate score can see. Hence a third pass, and it is deliberately the
+ * LAST one — a swap that raised flushness while stranding an island or ungrounding
+ * a block would be trading a number nobody looks at for two that matter, so
+ * every trial is checked against both.
+ */
+export function repairFlush(kit, sheets, opts = {}) {
+  const swaps = [];
+  /**
+   * WHY IT STOPPED, block by block, and this is not decoration.
+   *
+   * A repair pass that bounds its own coverage and says nothing reads as "the
+   * kit is as good as it gets" when it means "I gave up". Four of the blocks
+   * left over have no same-role candidate in the whole grammar — that is BACKLOG
+   * 0f, the vault that cannot land, and it belongs to the vocabulary and not to
+   * the selector. Saying so is the difference between a floor and a failure.
+   */
+  const left = [];
+  swaps.left = left;
+  const pinned = new Set(opts.pin || []);
+  const spec = opts.spec;
+  const floorOf = (s) => keyOf(profile(s.mask, '-z'));
+  const carries = (a, b) => socketsOf(a).set.has(`+z|${floorOf(b)}`);
+  const grounded = (list) => list.filter((s) => !list.some((a) => a !== s && carries(a, s))).length;
+
+  const roleFilter = (name) => (spec && spec.roles.find((r) => r.name === name) || {}).filter;
+
+  for (let pass = 0; pass < (opts.maxSwaps || 24); pass++) {
+    const inKit = new Set(kit.map((s) => s.recipe));
+    const seqs = new Set(kit.map((s) => s.f.seq));
+    const have = fullyFlush(kit);
+    const wasGround = grounded(kit);
+
+    // Worst first: a block with two walls unanswered is a bigger hole than one
+    // with a single odd side, and fixing it is likelier to answer somebody
+    // else's wall on the way past.
+    // NOTHING IS PROTECTED BY ROLE, not even the blocks the first two passes
+    // brought in. A first version left `bridge` and `lift` alone for fear of
+    // undoing them, which cost four of the eleven remaining and was superstition
+    // — the trial below re-checks connectivity and grounding outright, which is
+    // the property those passes were for. Only the PINNED are untouchable, and
+    // they are untouchable because the owner asked for them by name.
+    const short = kit.filter((s) => !pinned.has(s.recipe))
+      .map((s) => ({ s, met: wallsMet(s, kit) }))
+      .filter((x) => x.met < 4)
+      .sort((a, b) => a.met - b.met);
+    if (!short.length) break;
+
+    let done = false;
+    left.length = 0;
+    for (const { s, met } of short) {
+      const rest = kit.filter((x) => x !== s);
+      const answers = answersOf(rest);
+      const filter = roleFilter(s.role);
+      const why = { recipe: s.recipe, role: s.role, met, pool: 0, noGain: 0, split: 0, unground: 0 };
+      left.push(why);
+      // A CANDIDATE MUST BE ABLE TO DO THE JOB IT IS REPLACING. Without the role
+      // filter this pass would quietly refill the kit with whatever interlocks
+      // best, which is a hundred copies of one idea — the thing `pickKit` exists
+      // to prevent.
+      const flushable = sheets.filter((c) => !inKit.has(c.recipe) && !seqs.has(c.f.seq)
+        && wallsAnswered(c, answers) === 4
+        && (!filter || matches(c, filter)));
+      why.pool = flushable.length;
+      if (!flushable.length) continue;
+
+      // WHAT THIS BLOCK IS THE ONLY ONE ANSWERING.
+      //
+      // The first version swapped the short block for the best-scoring flush
+      // candidate and the total went up four times and then stopped. Of course:
+      // taking a block out takes its walls out too, and if it was the sole
+      // answer to somebody else's side the swap fixes one block and breaks
+      // another for a net nothing. Only the sockets some other kit block
+      // actually PRESENTS count — one nobody asks for is not a debt.
+      const owed = new Set();
+      for (const o of rest) {
+        for (const k of socketsOf(o).own) {
+          const [side, pat] = split(k);
+          const want = `${OPPOSITE[side]}|${pat}`;
+          if (socketsOf(s).set.has(want) && !rest.some((x) => x !== o && socketsOf(x).set.has(want))) owed.add(want);
+        }
+      }
+      const pays = (c) => [...owed].every((k) => socketsOf(c).set.has(k));
+      // Strictly-dominating candidates first — flush themselves AND leaving
+      // nobody worse off, so the total cannot fail to rise.
+      const order = [...flushable].sort((a, b) => (pays(b) - pays(a)) || (b.score - a.score));
+
+      for (const c of order.slice(0, opts.tries || 12)) {
+        const trial = [...rest, c];
+        if (fullyFlush(trial) <= have) { why.noGain++; continue; }
+        if (componentsOf(trial).count !== 1) { why.split++; continue; }
+        if (grounded(trial) > wasGround) { why.unground++; continue; }   // never ungrounds a block
+        c.role = s.role;
+        kit.splice(kit.indexOf(s), 1);
+        kit.push(c);
+        swaps.push({ added: c.recipe, dropped: s.recipe, role: s.role, flush: `${have} → ${fullyFlush(kit)}` });
+        done = true;
+        break;
+      }
+      if (done) break;
+    }
+    if (!done) break;
+  }
+  return swaps;
+}
+
 const bySpareness = (kit, spec) => (a, b) => {
   const sa = surplus(kit, spec, a) > 0 ? 0 : 1;
   const sb = surplus(kit, spec, b) > 0 ? 0 : 1;

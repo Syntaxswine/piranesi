@@ -63,8 +63,6 @@ S:corner,notch/3,corner:stone
 S:corner,frame,corner:stone
 S:corner,shaft,corner:stone
 S:corner,full,corner:stone
-S:corner,wall-curve,wall-ell:stone
-S:corner,twin/1,corner:stone
 S:ell,notch/1,ell:stone
 S:ell,shaft,ell:stone
 S:ell,full,ell:stone
@@ -78,7 +76,6 @@ S:tee,stub,tee:stone
 S:tee,drum,tee:stone
 S:bar,drum,bar:stone
 S:wall,ell/1,ell-deep/1:stone
-S:wall-tee,ell,ell-deep:stone
 S:corners-side,full,notch/3:stone
 S:wall-curve,wall-ell,wall-curve:stone
 S:corner-small,ell/2,ell-deep/2:stone
@@ -86,8 +83,6 @@ S:corner-small,shaft,frame:stone
 S:notch,frame,notch:stone
 S:corner-small,frame,shaft:stone
 S:corners-side,frame,notch/3:stone
-S:wall,notch/3,notch/3:stone
-S:corner-small,twin/1,notch:stone
 S:shaft,frame,frame:stone
 S:bar,bar,wall/2:stone
 S:corner,shaft,corner-small:stone
@@ -96,5 +91,10 @@ S:corner,shaft,corners-side/1:stone
 S:corner,notch/1,wall-tee:stone
 S:stub,frame,stub:stone
 S:drum,frame,drum:stone
-S:bar,frame,cross:stone
 S:corner,shaft,wall-curve:stone
+S:cross,full,cross:stone
+S:corner,frame,wall-curve:stone
+S:corner,frame,corners-side:stone
+S:corner,rounded,wall-curve:stone
+S:ell,shaft,wall-ell/2:stone
+S:corner,notch/2,wall-curve:stone

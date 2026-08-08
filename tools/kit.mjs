@@ -20,8 +20,9 @@ import { dirname, resolve } from 'node:path';
 import { everyBlock } from '../js/enumerate.js';
 import { measure, joinery, rank } from '../js/measure.js';
 import { blockFromRecipe } from '../js/stack.js';
-import { pickKit, auditKit, featuresOf, matches, repairConnectivity, repairVertical } from '../js/kit.js';
+import { pickKit, auditKit, featuresOf, matches, repairConnectivity, repairVertical, repairFlush } from '../js/kit.js';
 import { SUB, BLOCK_YARDS } from '../js/cube.js';
+import { PLAN_IDS } from '../js/plan.js';
 
 const argv = process.argv.slice(2);
 const arg = (n, d) => { const i = argv.indexOf(n); return i >= 0 && argv[i + 1] ? argv[i + 1] : d; };
@@ -119,6 +120,22 @@ for (const s of lifts) {
     : `  UNGROUNDED: ${s.stranded} blocks — ${s.why}`);
 }
 
+// AND THE WALLS, last of the three.  BACKLOG 0p: 17 edge words instead of 15
+// took the hundred from 96 of 100 fully flush to 82, and the reading that the
+// vocabulary had outgrown the kit was wrong — 15 of the 18 short blocks have a
+// SAME-ROLE replacement that is flush on all four.  It goes last because a swap
+// that raised flushness while stranding an island or ungrounding a block would
+// be trading the number nobody looks at for the two that matter.
+const met = repairFlush(kit, sheets, { pin: PIN, spec, tries: Number(arg('--tries', '64')) });
+for (const s of met) say(`  flush:  +${s.added}  −${s.dropped}  (${s.role}, ${s.flush})`);
+// NO SILENT CAPS. A pass that gives up quietly reads as "this is as good as it
+// gets"; these lines say which blocks are still short and what stopped each one.
+for (const w of met.left || []) {
+  say(`  short:  ${w.recipe}  (${w.role}, ${w.met}/4 walls) — `
+    + (w.pool ? `${w.pool} same-role candidates, ${w.noGain} no net gain, ${w.split} would split the kit, ${w.unground} would unground a block`
+      : 'nothing in the grammar can take its role and be flush'));
+}
+
 const audit = auditKit(kit);
 say(`  ${kit.length} blocks  ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
@@ -165,6 +182,38 @@ for (const [name, r] of Object.entries(audit.tests)) {
 }
 p('');
 
+if ((met.left || []).length) {
+  p('### The blocks still short of four walls, and why');
+  p('');
+  p('BACKLOG 0p asked why 17 edge words instead of 15 took this from 96 of 100 to');
+  p('82. The answer is that the quotas were innocent: **the greedy pass maximises a');
+  p('marginal gain and never goes back**, and whether a block\'s own walls end up');
+  p('answered is a fact about the other ninety-nine that no per-candidate score can');
+  p('see — the same shape of finding as connectivity and as the vertical. A third');
+  p('repair pass took it to');
+  p(`**${audit.fullyFlush}**. What is left is reported rather than rounded off:`);
+  p('');
+  p('| block | role | walls | what stopped it |');
+  p('|---|---|---:|---|');
+  for (const w of met.left) {
+    p(`| \`${w.recipe}\` | ${w.role} | ${w.met}/4 | ${w.pool
+      ? `${w.pool} same-role candidates; ${w.split} would split the kit, ${w.unground} would unground a block`
+      : '**nothing in the grammar** can take its role and be flush'} |`);
+  }
+  p('');
+  p('The ones with no candidate at all are a finding about the VOCABULARY, not');
+  p('about the pick — and four of them are arches, which is BACKLOG 0f in another');
+  p('costume: a vault runs but it cannot land, so its spandrel wall is met by');
+  p('almost nothing. A springer would close those four and nothing else will.');
+  p('');
+  p('**And the cost, said out loud.** Every swap trades an odd wall for a common');
+  p(`one, so distinct wall patterns in the kit fell from 55 to ${audit.wallPatterns}: eight more`);
+  p('blocks fully flush, six fewer kinds of seam. That is the right trade for a kit');
+  p('whose job is to tile — but it is a trade, and a pass that reported only the');
+  p('number it was optimising would have hidden it.');
+  p('');
+}
+
 if (short.length) {
   p('### Roles that ran short');
   p('');
@@ -183,7 +232,7 @@ p('| role | blocks |');
 p('|---|---:|');
 for (const [k, v] of Object.entries(audit.roles).sort((a, b) => b[1] - a[1])) p(`| ${k} | ${v} |`);
 p('');
-p('**Plans used**, of the 16 in the vocabulary — a plan appearing nowhere means');
+p(`**Plans used**, of the ${PLAN_IDS.length} in the vocabulary — a plan appearing nowhere means`);
 p('the kit cannot make anything that shape.');
 p('');
 p('| plan | blocks using it |');
