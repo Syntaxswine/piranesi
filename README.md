@@ -66,7 +66,7 @@ twenty-four plans forever.
 
 **The one rule that makes it assemble is the cube law.** A block is nine yards
 cubed — nine sub-blocks of one yard each — every cut falls on a slice plane, and
-every curve is struck at R 2.5 or R 4.5. The whole-block circle is *inscribed*,
+every curve is struck at R 2 or R 4.5. The whole-block circle is *inscribed*,
 so `R_WHOLE === SUB/2` and an arch springs and crowns exactly on the boundary
 planes. Neighbours therefore agree at the seam by construction, their coincident
 faces cancel, and a run of blocks reads as one continuous interior rather than a
@@ -74,7 +74,7 @@ row of boxes. *(This supersedes the socket ladder described further down.)*
 
 ```bash
 npm run serve      # http://localhost:8749
-npm test           # 70 laws
+npm test           # 89 laws
 npm run shot       # pull an impression, headless, to docs/shots/
 ```
 
@@ -92,10 +92,10 @@ walks all of it in under twenty seconds, measures every block, ranks them and wr
 [`docs/CENSUS.md`](docs/CENSUS.md). Read that file: it is the map of what this
 game can actually build.
 
-It also measures whether the cube law works, and it does — **66,900 of 66,920
-blocks have all four walls met exactly by some other block**, and there are only
-1,786 distinct wall patterns across the whole catalogue, which is why anything
-meets anything.
+It also measures whether the cube law works, and it does — **66,913 of 66,920
+blocks have all four walls met exactly by some other block, and NOT ONE meets
+nothing at all**, across only 2,817 distinct wall patterns — which is why
+anything meets anything.
 
 Four separate measurements in it were wrong at first, all the same way: they
 agreed with everything. `flush` scored 4/4 for 99.8% of blocks, `support`
@@ -116,16 +116,19 @@ The interface is smaller than it looks. **Every opening in the grammar is a
 rectangle 3, 6 or 9 yards tall with its sill at 0, 3 or 6**, because a block is
 three plans extruded — there is no design freedom in the vertical at all. So the
 only real variable is the WORD: one storey of one wall, nine yards across. Of
-512 possible nine-bit words the whole grammar uses **fifteen**, and three of
+512 possible nine-bit words the whole grammar uses **seventeen**, and three of
 those occur only in arches.
 
 ```
-a wall  =  three storeys, each one of twelve words
+a wall  =  three storeys, each one of a dozen words
 ```
 
 [`docs/APERTURES.md`](docs/APERTURES.md) has the table, which plan emits which
-word, and the cost of a word only one plan can make: a block showing `chamfer`
-reaches 29 blocks against a baseline of 239 — **8× worse**.
+word, and the cost of a word only one plan can make. That cost used to be
+crushing — a block showing `chamfer` reached 29 against a baseline of 239,
+**8× worse**, and the all-`rounded` block met nothing in the whole grammar. At
+R = 2 `rounded` stopped emitting `chamfer`, the dead end closed, and what
+sole-source words survive cost 1.16×.
 
 ## The hundred
 
@@ -185,7 +188,7 @@ reads as one barrel vault with no membranes between the bays.
 it, and a save carries the recipes it uses in its own palette. So the generator
 can be changed freely without touching anything already built. `S:ell,bar/1,frame:stone`
 is a stack of three plans; `A:y+:twin:stone` is an arch along y on twin piers;
-`D:00ii,004i!609in,5eii:stone` is one somebody drew. Adding a plan is free — no
+`D:40ei044ee4ie~cccc,004i!609in,6eii:stone` is one somebody drew. Adding a plan is free — no
 existing recipe mentions it. Renaming or removing one breaks every recipe that
 names it, and `decode` reports those rather than quietly substituting something.
 
@@ -199,16 +202,30 @@ cube's own slice lines.
 The grammar enumerates 66,920 blocks and every one of them is a choice the
 *grammar* made. This is the other half: when you want a specific piece, "which
 of the twenty-four plans is nearest?" is the wrong question. Fill the grid with
-a bucket, drag a rectangle, lay a ramp, scroll between the three layers, and
+a bucket, drag a rectangle, lay a ramp, round a corner, scroll the three layers, and
 watch the model in the corner rebuild as you go.
 
 **The board is the planes.** A cell is the gap between two adjacent slice lines
-— 2, ½, ½, 1½, 1½, ½, ½ and 2 yards across, deliberately not a uniform grid —
-so every edge lands on a slice plane by construction and there is nowhere
-illegal to put the pen. His cross-section's arcs are ruled underneath as guides,
-because they are *why* there is a plane at 2.5 at all. Simplify the ladder and
-the board gets coarser on its own; drawings keep their yards, because a recipe
+— 2, 1, 1½, 1½, 1 and 2 yards across, deliberately not a uniform grid — so every
+edge lands on a slice plane by construction and there is nowhere illegal to put
+the pen. His cross-section's arcs are ruled underneath as guides, because they
+are *why* the odd planes are there. It is derived from `PLANES`, so changing the
+ladder makes the board follow; drawings keep their yards, because a recipe
 stores yards and never a cell index.
+
+**And the circles work, because R came down to 2.** At 2.5 a corner arc crossed
+its edges at 2.5 — between the planes at 2 and 3 — so a round was a property of
+the whole block and there was no way to ask for one corner of it. At 2 it
+crosses at 2 and 7, **the corner cell is exactly R × R**, and a round becomes a
+property of one cell: click it for a *column* (the quarter-disc about the
+block's own corner, the shaft four blocks grow between them), again for a
+*cove* (the same cell with its outer arris rounded off). The centred circle
+cannot be a cell at any radius, so it is a per-storey **disc** instead — a free-
+standing drum, or the storey bored through at R or at the whole block.
+
+Between them the board can draw **every plan in the vocabulary**, curves
+included, and there is a test that checks it plan by plan: draw it, build it,
+and the solidity mask must equal the named plan's.
 
 **A painted region becomes a partition**, not a union — disjoint maximal
 rectangles — so the commonest way to draw a broken block is unreachable. Two
@@ -226,7 +243,7 @@ The recipe is the whole document: it is what is saved, what is in the box, what
 is in the URL, and what a building carries with it.
 
 ```bash
-node tools/blockshot.mjs --recipes 'D:00ii,004i!609in,5eii:stone' --run 3
+node tools/blockshot.mjs --recipes 'D:40ei044ee4ie~cccc,004i!609in,6eii:stone' --run 3
 ```
 
 Three of that one in a row cancel sixteen faces: the floors merge into one

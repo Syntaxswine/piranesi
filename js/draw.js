@@ -32,8 +32,9 @@
 //    the generated hand.  See game.js `drawnShelf`.
 
 import {
-  SLICES, N, LAYERS, RISE, DIRS, DECKS, idx,
-  blank, rectsInYards, cellsFromRects, encodeDrawn, decodeDrawn,
+  SLICES, N, LAYERS, RISE, DIRS, DECKS, DISCS, CORNER_CELLS, idx,
+  blank, blankLayer, rectsInYards, cellsFromRects, encodeDrawn, decodeDrawn,
+  cornerPolys, discPolys, ownedCells, drumCells,
 } from './drawn.js';
 import { SUB, R, R_WHOLE } from './cube.js';
 import { blockFromRecipe } from './stack.js';
@@ -54,6 +55,15 @@ const TOOLS = [
   { id: 'paint', name: 'paint', key: 'P', note: 'one cell at a time' },
   { id: 'block', name: 'block', key: 'K', note: 'drag a rectangle' },
   { id: 'ramp', name: 'ramp', key: 'M', note: 'drag the way you walk up' },
+  { id: 'round', name: 'round', key: 'O', note: 'a corner: column, then cove' },
+];
+
+/** The disc on the axis. `none` first, so the row reads as off-by-default. */
+const DISC_ROW = [
+  { id: '', name: 'none', note: 'no circle on the axis' },
+  { id: 'd', name: 'drum', note: 'a free-standing column at R, standing in the room' },
+  { id: 's', name: 'shaft', note: 'the whole storey, with the R circle bored out' },
+  { id: 'b', name: 'bore', note: 'the whole storey, with the whole-block circle bored out' },
 ];
 
 const state = {
@@ -155,6 +165,49 @@ function guides() {
   bctx.restore();
 }
 
+/**
+ * THE PLAN OF ONE STOREY, AS POLYGONS.
+ *
+ * Not "rectangles for the squares and some arcs drawn on top for the curves":
+ * these are literally the polygons `drawnMesh` will extrude, asked for from the
+ * same functions. A corner round on the board is the corner round that gets
+ * built, tessellation and all, so the board cannot show you a shape the block
+ * does not have.
+ */
+function planPolys(lay) {
+  const paint = ownedCells(lay.corners).reduce((c, [i, j]) => { c[idx(i, j)] = 0; return c; }, lay.cells.slice());
+  return [
+    ...rectsInYards(paint).map(([x0, y0, x1, y1]) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]),
+    ...cornerPolys(lay.corners),
+    ...discPolys(lay.disc),
+  ];
+}
+
+function fillPolys(polys, style) {
+  if (!polys.length) return;
+  bctx.fillStyle = style;
+  bctx.beginPath();
+  for (const poly of polys) {
+    poly.forEach(([x, y], i) => (i ? bctx.lineTo(px(x), py(y)) : bctx.moveTo(px(x), py(y))));
+    bctx.closePath();
+  }
+  bctx.fill();
+}
+
+function strokePolys(polys, style, dash = [3, 3]) {
+  if (!polys.length) return;
+  bctx.strokeStyle = style;
+  bctx.lineWidth = 1;
+  bctx.setLineDash(dash);
+  bctx.beginPath();
+  for (const poly of polys) {
+    poly.forEach(([x, y], i) => (i ? bctx.lineTo(px(x), py(y)) : bctx.moveTo(px(x), py(y))));
+    bctx.closePath();
+  }
+  bctx.stroke();
+  bctx.setLineDash([]);
+}
+
 /** The storey below as a wash, the one above as an outline.  Below is what you
  *  are standing on, so it wants weight; above is what is coming, so it wants a
  *  line and nothing else. */
@@ -162,18 +215,8 @@ function ghost(li, which) {
   if (li < 0 || li >= LAYERS) return;
   const lay = state.drawing.layers[li];
   bctx.save();
-  if (which === 'below') {
-    bctx.fillStyle = 'rgba(56, 50, 42, 0.15)';
-    forCells(lay.cells, (x0, y0, x1, y1) => bctx.fillRect(px(x0), py(y1), (x1 - x0) * SCALE, (y1 - y0) * SCALE));
-  } else {
-    bctx.strokeStyle = 'rgba(91, 101, 112, 0.55)';
-    bctx.lineWidth = 1;
-    bctx.setLineDash([3, 3]);
-    for (const [x0, y0, x1, y1] of rectsInYards(lay.cells)) {
-      bctx.strokeRect(px(x0) + 0.5, py(y1) + 0.5, (x1 - x0) * SCALE - 1, (y1 - y0) * SCALE - 1);
-    }
-    bctx.setLineDash([]);
-  }
+  if (which === 'below') fillPolys(planPolys(lay), 'rgba(56, 50, 42, 0.15)');
+  else strokePolys(planPolys(lay), 'rgba(91, 101, 112, 0.55)');
   for (const r of lay.ramps) {
     bctx.strokeStyle = which === 'below' ? 'rgba(150, 80, 46, 0.40)' : 'rgba(91, 101, 112, 0.40)';
     bctx.setLineDash([2, 3]);
@@ -183,15 +226,11 @@ function ghost(li, which) {
   bctx.restore();
 }
 
-/** The working storey's masonry, drawn as the maximal rectangles it will
- *  actually become — so what you see on the board is the partition the mesh
- *  gets, not a grid of squares that happens to look the same. */
+/** The working storey's masonry, drawn as the partition the mesh will get —
+ *  not a grid of squares that happens to look the same. */
 function stone() {
   bctx.save();
-  bctx.fillStyle = 'rgba(64, 58, 48, 0.86)';
-  for (const [x0, y0, x1, y1] of rectsInYards(L().cells)) {
-    bctx.fillRect(px(x0), py(y1), (x1 - x0) * SCALE, (y1 - y0) * SCALE);
-  }
+  fillPolys(planPolys(L()), 'rgba(64, 58, 48, 0.86)');
   bctx.restore();
 }
 
@@ -318,10 +357,6 @@ function rampGhost(d) {
   bctx.restore();
 }
 
-function forCells(cells, fn) {
-  for (const [x0, y0, x1, y1] of rectsInYards(cells)) fn(x0, y0, x1, y1);
-}
-
 /* -------------------------------------------------------------- the tools */
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -349,38 +384,88 @@ function rampAt(lay, i, j) {
   return lay.ramps.find((r) => x > r.x0 && x < r.x1 && y > r.y0 && y < r.y1) || null;
 }
 
+/** Which corner of the block is this cell, if any?  The four that can carry an
+ *  arc, in `plan.js` CORNERS order. */
+const cornerOf = (i, j) => CORNER_CELLS.findIndex(([a, b]) => a === i && b === j);
+
+/**
+ * WHAT ALREADY OWNS THIS CELL — a ramp, a corner round, the drum, or nothing.
+ *
+ * One question for every tool, because in the end they all mean the same
+ * refusal: two solids in one place come back VOID from the parity test, so
+ * there is exactly one occupant per cell and it does not matter which kind.
+ */
+function occupant(lay, i, j) {
+  if (lay.disc === 's' || lay.disc === 'b') return 'the bore';
+  const k = cornerOf(i, j);
+  if (k >= 0 && lay.corners[k] !== '.') return 'a corner round';
+  if (rampAt(lay, i, j)) return 'a ramp';
+  if (lay.disc === 'd' && drumCells().some(([a, b]) => a === i && b === j)) return 'the drum';
+  return null;
+}
+
 function setCell(i, j, v) {
   const lay = L();
   if (v) {
     // Painting over a ramp takes the ramp out.  Refusing instead would mean
     // erasing a ramp before you could draw where it was, which is a rule you
-    // fight rather than one that helps.
-    const r = rampAt(lay, i, j);
-    if (r) { lay.ramps.splice(lay.ramps.indexOf(r), 1); say('the ramp came out to make room'); }
+    // fight rather than one that helps.  A round and a drum are deliberate
+    // enough to be worth defending; a stroke of paint should not eat one.
+    const held = occupant(lay, i, j);
+    if (held === 'a ramp') {
+      const r = rampAt(lay, i, j);
+      lay.ramps.splice(lay.ramps.indexOf(r), 1);
+      say('the ramp came out to make room');
+    } else if (held) return;
   }
   lay.cells[idx(i, j)] = v;
 }
 
 /** THE BUCKET.  Flood the 4-connected region of cells in the same state as the
- *  one clicked; ramps are walls to it, for the same reason they are walls to
- *  the paint. */
+ *  one clicked; anything that owns a cell is a wall to it, for the same reason
+ *  it is a wall to the paint. */
 function bucket(i, j, v) {
   const lay = L();
   const from = lay.cells[idx(i, j)];
-  if (from === v || rampAt(lay, i, j)) return 0;
+  if (from === v || occupant(lay, i, j)) return 0;
   const stack = [[i, j]];
   const seen = new Uint8Array(N * N);
   let n = 0;
   while (stack.length) {
     const [a, b] = stack.pop();
     if (a < 0 || b < 0 || a >= N || b >= N || seen[idx(a, b)]) continue;
-    if (lay.cells[idx(a, b)] !== from || rampAt(lay, a, b)) continue;
+    if (lay.cells[idx(a, b)] !== from || occupant(lay, a, b)) continue;
     seen[idx(a, b)] = 1;
     lay.cells[idx(a, b)] = v;
     n++;
     stack.push([a + 1, b], [a - 1, b], [a, b + 1], [a, b - 1]);
   }
   return n;
+}
+
+/**
+ * THE ROUND.  Click a corner of the block and it cycles: nothing → COLUMN, the
+ * quarter-disc struck about the block's own corner, which is the engaged shaft
+ * four blocks meeting at an arris grow between them → COVE, the same cell with
+ * its outer arris rounded off instead → nothing.
+ *
+ * Only the four corner cells, and that is geometry rather than policy: the arcs
+ * are struck at R about the block's corners or the points R inside them, and
+ * since R = 2 the R-by-R corner cell is the only cell either arc fits in.
+ */
+const NEXT_ROUND = { '.': 'o', o: 'c', c: '.' };
+const ROUND_NAME = { o: 'a column at the corner', c: 'the arris rounded off', '.': 'square again' };
+
+function setRound(k, ch) {
+  const lay = L();
+  const s = lay.corners.split('');
+  s[k] = ch;
+  lay.corners = s.join('');
+  // The token owns the cell, so the paint under it goes. Otherwise the encoder
+  // would drop it silently and the board would be showing a lie.
+  const [i, j] = CORNER_CELLS[k];
+  if (ch !== '.') lay.cells[idx(i, j)] = 0;
+  say(ROUND_NAME[ch]);
 }
 
 /** A drag → the ramp it describes.  The direction is the way you dragged, so
@@ -450,9 +535,17 @@ board.addEventListener('pointerdown', (e) => {
   state.drag = { from: c, to: c, erase: e.button === 2 };
   const erase = e.button === 2;
 
-  if (state.tool === 'bucket') {
+  if (state.tool === 'round') {
+    state.drag = null;
+    const k = cornerOf(c[0], c[1]);
+    if (k < 0) return say('a round only fits a corner of the block — that is where the arcs are struck', true);
+    setRound(k, erase ? '.' : NEXT_ROUND[L().corners[k]]);
+    changed();
+  } else if (state.tool === 'bucket') {
     const n = bucket(c[0], c[1], erase ? 0 : 1);
-    say(n ? `${n} cell${n > 1 ? 's' : ''} ${erase ? 'cleared' : 'filled'}` : 'nothing to flood there');
+    const held = occupant(L(), c[0], c[1]);
+    say(n ? `${n} cell${n > 1 ? 's' : ''} ${erase ? 'cleared' : 'filled'}`
+      : held ? `${held} is there already` : 'nothing to flood there');
     changed(false);
   } else if (state.tool === 'paint') {
     setCell(c[0], c[1], erase ? 0 : 1);
@@ -509,7 +602,9 @@ addEventListener('keydown', (e) => {
 function snap() {
   return {
     mat: state.drawing.mat,
-    layers: state.drawing.layers.map((l) => ({ cells: l.cells.slice(), ramps: l.ramps.map((r) => ({ ...r })) })),
+    layers: state.drawing.layers.map((l) => ({
+      cells: l.cells.slice(), ramps: l.ramps.map((r) => ({ ...r })), corners: l.corners, disc: l.disc,
+    })),
   };
 }
 function push() { state.undo.push(snap()); if (state.undo.length > 100) state.undo.shift(); }
@@ -667,6 +762,44 @@ function setTool(id) {
   say(`${t.name} — ${t.note}`);
 }
 
+/** The disc row: the circle on the axis, which cannot be a cell because 4.5 is
+ *  not a cell boundary at any radius. */
+function discs() {
+  const box = $('#discs');
+  box.innerHTML = '';
+  for (const d of DISC_ROW) {
+    const b = document.createElement('button');
+    b.className = 'tool' + (L().disc === d.id ? ' on' : '');
+    b.dataset.disc = d.id;
+    b.title = d.note;
+    b.innerHTML = `<span>${d.name}</span>`;
+    b.onclick = () => setDisc(d.id);
+    box.append(b);
+  }
+}
+
+function setDisc(id) {
+  push();
+  const lay = L();
+  if (id === 's' || id === 'b') {
+    // A bore is the whole storey — that is what boring through something means.
+    const had = lay.cells.some((v) => v) || lay.ramps.length || lay.corners !== '....';
+    Object.assign(lay, blankLayer(), { disc: id });
+    say(`${DISCS[id]} — the whole storey${had ? ', so what was drawn here went' : ''}`);
+  } else if (id === 'd') {
+    let cleared = 0;
+    for (const [i, j] of drumCells()) if (lay.cells[idx(i, j)]) { lay.cells[idx(i, j)] = 0; cleared++; }
+    lay.ramps = lay.ramps.filter((r) => !(r.x0 < 6.5 && r.x1 > 2.5 && r.y0 < 6.5 && r.y1 > 2.5));
+    lay.disc = 'd';
+    say(`a drum on the axis${cleared ? ` · ${cleared} cells cleared under it` : ''}`);
+  } else {
+    lay.disc = '';
+    say('no circle on the axis');
+  }
+  changed();
+  paintBoard();
+}
+
 /** The three storeys as three little plans.  Top of the list is the top of the
  *  block, which is why the column is reversed in the stylesheet: a stack drawn
  *  bottom-up on screen is a stack you have to translate. */
@@ -686,7 +819,13 @@ function storeys() {
     const c = document.createElement('span');
     c.className = 'c';
     const fill = lay.cells.reduce((a, v) => a + v, 0);
-    c.textContent = `${DECKS[i]}–${DECKS[i + 1]} yd · ${fill}/${N * N}${lay.ramps.length ? ' · ramp' : ''}`;
+    const notes = [];
+    if (lay.ramps.length) notes.push('ramp');
+    if (lay.corners !== '....') notes.push('round');
+    if (lay.disc) notes.push(DISCS[lay.disc]);
+    c.textContent = (lay.disc === 's' || lay.disc === 'b')
+      ? `${DECKS[i]}–${DECKS[i + 1]} yd · ${DISCS[lay.disc]}`
+      : `${DECKS[i]}–${DECKS[i + 1]} yd · ${fill}/${N * N}${notes.length ? ' · ' + notes.join(' ') : ''}`;
     b.append(cv, n, c);
     b.onclick = () => setLayer(i);
     box.append(b);
@@ -699,9 +838,12 @@ function thumb(cv, lay) {
   g.fillStyle = '#ecebe0';
   g.fillRect(0, 0, cv.width, cv.height);
   g.fillStyle = 'rgba(64, 58, 48, 0.86)';
-  for (const [x0, y0, x1, y1] of rectsInYards(lay.cells)) {
-    g.fillRect(x0 * k, (S - y1) * k, (x1 - x0) * k, (y1 - y0) * k);
+  g.beginPath();
+  for (const poly of planPolys(lay)) {
+    poly.forEach(([x, y], i) => (i ? g.lineTo(x * k, (S - y) * k) : g.moveTo(x * k, (S - y) * k)));
+    g.closePath();
   }
+  g.fill();
   g.fillStyle = 'rgba(150, 80, 46, 0.75)';
   for (const r of lay.ramps) g.fillRect(r.x0 * k, (S - r.y1) * k, (r.x1 - r.x0) * k, (r.y1 - r.y0) * k);
 }
@@ -711,6 +853,7 @@ function setLayer(l) {
   $('#layer').textContent = `layer ${state.layer}`;
   $('#height').textContent = `${DECKS[state.layer]} – ${DECKS[state.layer + 1]} yd`;
   for (const b of document.querySelectorAll('.storey')) b.classList.toggle('on', +b.dataset.i === state.layer);
+  discs();
   paintBoard();
   repaintModel();
 }
@@ -768,6 +911,7 @@ function changed(model = true) {
   const rec = encodeDrawn(state.drawing);
   $('#recipe').value = rec;
   storeys();
+  discs();
   try { localStorage.setItem(DRAFT_KEY, rec); } catch { /* full */ }
   history.replaceState(null, '', '#' + rec);
   if (model) repaintModel();
@@ -780,7 +924,12 @@ function adopt(rec, quiet = false) {
   if (!d.ok) { if (!quiet) say(d.why, true); return false; }
   state.drawing = {
     mat: d.mat === 'rustic' ? 'rustic' : 'stone',
-    layers: d.layers.map((l) => ({ cells: cellsFromRects(l.rects), ramps: l.ramps.map((r) => ({ ...r })) })),
+    layers: d.layers.map((l) => ({
+      cells: cellsFromRects(l.rects),
+      ramps: l.ramps.map((r) => ({ ...r })),
+      corners: l.corners,
+      disc: l.disc,
+    })),
   };
   $('#mat').textContent = state.drawing.mat;
   changed();
@@ -814,7 +963,7 @@ $('#undo').onclick = () => pop();
 
 $('#clearlayer').onclick = () => {
   push();
-  state.drawing.layers[state.layer] = { cells: new Uint8Array(N * N), ramps: [] };
+  state.drawing.layers[state.layer] = blankLayer();
   say(`layer ${state.layer} cleared`);
   changed();
   paintBoard();
@@ -835,10 +984,10 @@ setTool(state.tool);
 if (!adopt(decodeURIComponent(location.hash.slice(1)), true)) {
   if (!adopt(localStorage.getItem(DRAFT_KEY) || '', true)) {
     // A first block, so the board is never an empty promise — and it is the one
-    // the whole family exists for: a solid ground floor, a wall to lean on, a
-    // ramp climbing north across the first storey and a landing at the head of
-    // it.  Three of them in a row make a stair that runs.
-    adopt('D:00ii,004i!609in,5eii:stone', true);
+    // the whole family exists for: a solid ground floor with its arrises
+    // rounded, a wall to lean on, a ramp climbing north across the first storey
+    // and a landing at the head of it.  Three in a row make a stair that runs.
+    adopt('D:40ei044ee4ie~cccc,004i!609in,6eii:stone', true);
   }
 }
 loadShelf();

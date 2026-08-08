@@ -147,9 +147,9 @@ for (const [bits, id] of soleMakers) {
 }
 p('');
 p('');
-p('**And it is expensive.** Grouping every block by whether it presents a');
-p('sole-source word on any wall, and measuring how many of the 10,826 can meet');
-p('its walls:');
+p('**IT USED TO BE EXPENSIVE, AND AT R = 2 IT IS NOT.** Grouping every block by');
+p('whether it presents a sole-source word on any wall, and measuring how much of');
+p('the grammar can meet its walls:');
 p('');
 p('| presents | blocks | mean reach | |');
 p('|---|---:|---:|---|');
@@ -175,17 +175,21 @@ p('|---|---:|---:|---|');
   }
 }
 p('');
-p('So a block showing `chamfer` anywhere can meet **29** of the 10,826 instead of');
-p('239. Nearly half the grammar carries one of these words on some wall. **A');
-p('second plan emitting `chamfer` would multiply the reach of 992 blocks by');
-p('eight** — and it need not resemble `rounded` at all, it only has to leave');
-p('stone in the same nine yards.');
+p('**THIS WAS THE MECHANISM BEHIND THE GRAMMAR\'S ONE DEAD END, AND THE OWNER');
+p('CLOSED IT BY CHANGING THE RADIUS.** At R = 2.5 the worst of these words was');
+p('`chamfer`: `S:rounded,rounded,rounded` presented it on all three storeys of');
+p('all four walls, `rounded` was the only plan that made it, and `rounded` is');
+p('four-fold symmetric — so there was exactly one such block, and it could only');
+p('ever meet itself. A block showing `chamfer` anywhere reached **29** against a');
+p('baseline of 239: eight times worse.');
 p('');
-p('This is the mechanism behind the census\'s one dead end. `S:rounded,rounded,');
-p('rounded` presents `chamfer` on all three storeys of all four walls, `rounded`');
-p('is the only plan that makes `chamfer`, and `rounded` is four-fold symmetric so');
-p('there is exactly one such block. **It can only ever meet itself, and there is');
-p('no second one.** Not a quirk of that block — a property of the word.');
+p('At R = 2 the round bites less than a whole sub-block out of the corner, so');
+p('`rounded` speaks `wall` like everything else, `chamfer` is not in the');
+p('vocabulary at all, and **nothing in the grammar meets nothing**. Read the');
+p('table above rather than this paragraph: the sole-source words that survive');
+p('cost close to nothing, and their WORST case is better than the general worst');
+p('case. Something else now sets the floor on how placeable a block is, and this');
+p('document does not yet say what. See BACKLOG 0q.');
 p('');
 
 p('## Which plan emits which word');

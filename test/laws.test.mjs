@@ -20,7 +20,7 @@ import { buildCatalog as buildCatalog2 } from '../js/compose.js';
 import { bandFor, buildCamera, LAYER } from '../js/build.js';
 import {
   SUB, SUB_YARDS, SUB_FEET, BLOCK_YARDS, BLOCK_FEET, BLOCK_METRES,
-  METRES_PER_SUB, R, R_WHOLE, onPlane,
+  METRES_PER_SUB, R, R_WHOLE, onPlane, PLANES,
 } from '../js/cube.js';
 import { FORMS } from '../js/forms.js';
 import { SAMPLE_OFFSETS } from '../js/solidity.js';
@@ -455,7 +455,7 @@ test('the stone skin draws no hatching at all, and the engraver still can', () =
 
 /* ------------------------------------------------------------ the cube law */
 
-test('the cube law: two radii, nine planes, and a block of nine yards cubed', () => {
+test('the cube law: two radii, seven planes, and a block of nine yards cubed', () => {
   // The owner's spec of 2026-08-06, pinned as numbers so a later "tidy-up" of
   // the constants has to argue with it.  Every one was read off his diagram and
   // agreed with the photograph to better than 1.5% of the block's width; the
@@ -476,11 +476,28 @@ test('the cube law: two radii, nine planes, and a block of nine yards cubed', ()
   // ever stops being true, arches stop springing on the boundary planes and
   // neighbouring vaults stop meeting.
   assert.ok(Math.abs(R_WHOLE - SUB / 2) < 1e-12, 'the whole-block circle must be inscribed');
-  assert.equal(R, 2.5);
+
+  // R WAS 2.5 AND HE CHANGED IT, 2026-08-07: "we got rid of the 2.5 corner and
+  // reduced it down to a radius of 2."  His reason was legibility — "2&3 are
+  // fairly close enough as it is that i worry that adding 2.5 will make it hard
+  // to tell which is which when eyeballing blocks" — and the measurement agreed
+  // from the other end: `ell(2.5)` and `ell(3)` emit the same edge word, so the
+  // half-yard planes expressed nothing and dropping them cost no vocabulary.
+  assert.equal(R, 2);
   assert.ok(onPlane(0) && onPlane(SUB) && onPlane(SUB / 2), 'the boundary and the axis are planes');
-  for (const v of [0, 2, 2.5, 3, 4.5, 6, 6.5, 7, 9]) {
+  for (const v of [0, 2, 3, 4.5, 6, 7, 9]) {
     assert.ok(onPlane(v), `${v} is one of his coloured lines and must be a plane`);
   }
+  for (const v of [2.5, 6.5]) {
+    assert.ok(!onPlane(v), `${v} was a tick for a corner arc of 2.5 and there is no such arc now`);
+  }
+
+  // AND THE LADDER NOW CLOSES ON ITSELF, which is the property the drawing
+  // board is built on: an arc struck at R about a block corner crosses its
+  // edges AT PLANES, so the corner cell is exactly R by R and a corner round is
+  // a property of one cell rather than of the whole block.
+  assert.ok(onPlane(R) && onPlane(SUB - R), 'a corner arc must cross the edge on a plane');
+  assert.equal(PLANES.indexOf(R), 1, 'and it must be the FIRST plane in, or the cell is not the arc');
   // And the reason his unit is the right one: this form is "mostly for making
   // high vaulted arches", so its span has to be a vault and not a doorway.
   const span = R_WHOLE * 2;

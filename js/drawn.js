@@ -47,11 +47,12 @@
 // grammar can check rather than a note in a document.
 
 import { Mesh } from './mesh.js';
-import { SUB, PLANES, DECKS, STOREY } from './cube.js';
-import { rect, extrudePlan } from './plan.js';
+import { SUB, PLANES, DECKS, STOREY, R, R_WHOLE } from './cube.js';
+import { rect, extrudePlan, CORNERS, columnAt, coveAt, drum, bored } from './plan.js';
 import { tagFlat } from './forms.js';
 
 const S = SUB;
+const C = S / 2;
 
 /* ------------------------------------------------------------- the board -- */
 
@@ -72,6 +73,37 @@ export const RISE = STOREY;
 /** The uphill direction of a ramp: e = +x, n = +y, w = -x, s = -y. */
 export const DIRS = ['e', 'n', 'w', 's'];
 
+/**
+ * THE CURVES, and there are only two kinds because the cube law only has two
+ * radii and nine legal centres.
+ *
+ * A CORNER ROUND is a cell.  Since R = 2 the corner cell is exactly R by R, so
+ * an arc struck at R about either end of its diagonal lies wholly inside it:
+ * `o` keeps the quarter-disc about the block's own corner (a column), `c`
+ * rounds the outer arris off instead (a cove).  `.` is no curve.  Four
+ * characters, anticlockwise from the origin, the same order as `plan.js`
+ * CORNERS — and the token OWNS its cell, so the paint underneath is ignored.
+ *
+ * A DISC is the layer.  The centred circle is struck about the axis at 4.5,
+ * which is not a cell boundary at any radius, so it cannot be a cell thing:
+ *   d  a free-standing drum at R — a column standing in the middle of the room
+ *   s  the storey solid, with the R circle bored out of it   (`shaft`)
+ *   b  the storey solid, with the WHOLE-BLOCK circle bored   (`bore`)
+ * `d` shares its layer; `s` and `b` are the whole storey and take no paint,
+ * which is not a limitation but what boring through something means.
+ *
+ * Between them the board can now draw every curve the grammar has — there is a
+ * test that says so, plan by plan.
+ */
+export const CORNER_TOKENS = ['.', 'o', 'c'];
+export const DISCS = { d: 'drum', s: 'shaft', b: 'bore' };
+/** The cell each corner token owns: the corner cells of the board. */
+export const CORNER_CELLS = [[0, 0], [N - 1, 0], [N - 1, N - 1], [0, N - 1]];
+/** Cells a centred drum reserves — its bounding box is [C-R, C+R], which lands
+ *  between planes, so the reservation is the cells that box touches. */
+const DRUM_LO = SLICES.findIndex((v, i) => v <= C - R && SLICES[i + 1] > C - R);
+const DRUM_HI = SLICES.findIndex((v) => v >= C + R);
+
 /** Cell (i,j) → its square in yards, [x0,y0,x1,y1]. */
 export const cellBox = (i, j) => [SLICES[i], SLICES[j], SLICES[i + 1], SLICES[j + 1]];
 export const idx = (i, j) => i + N * j;
@@ -87,8 +119,27 @@ export function planeIndex(v, eps = 1e-6) {
 export function blank(mat = 'stone') {
   return {
     mat,
-    layers: Array.from({ length: LAYERS }, () => ({ cells: new Uint8Array(N * N), ramps: [] })),
+    layers: Array.from({ length: LAYERS }, () => blankLayer()),
   };
+}
+
+export const blankLayer = () => ({ cells: new Uint8Array(N * N), ramps: [], corners: '....', disc: '' });
+
+/** Which board cells a corner string takes over.  A token OWNS its cell, so the
+ *  paint there is not merely covered — it is not emitted at all. */
+export function ownedCells(corners = '....') {
+  const out = [];
+  for (let k = 0; k < 4; k++) if (corners[k] && corners[k] !== '.') out.push(CORNER_CELLS[k]);
+  return out;
+}
+
+/** The cells a drum reserves.  It is round and the reservation is square, which
+ *  is the conservative direction: a wall clipping the box really would cross
+ *  the circle somewhere along it. */
+export function drumCells() {
+  const out = [];
+  for (let j = DRUM_LO; j < DRUM_HI; j++) for (let i = DRUM_LO; i < DRUM_HI; i++) out.push([i, j]);
+  return out;
 }
 
 /* -------------------------------------------------------- the partition -- */
@@ -166,11 +217,25 @@ for (const p of SLICES) HY(p);
 const encRect = ([x0, y0, x1, y1]) => HY(x0) + HY(y0) + HY(x1) + HY(y1);
 const encRamp = (r) => HY(r.x0) + HY(r.y0) + HY(r.x1) + HY(r.y1) + r.dir;
 
-/** One layer: its rectangles, then `!` and its ramps.  `-` is an empty layer,
- *  because a blank field between two commas is hard to see and easy to lose. */
-export function encodeLayer({ cells, rects, ramps = [] }) {
-  const R = rects || rectsInYards(cells);
-  let s = R.map(encRect).join('');
+/**
+ * ONE LAYER, in canonical order: `<rectangles>~<corners>*<disc>!<ramps>`, and
+ * `-` for an empty one — a blank field between two commas is hard to see and
+ * easy to lose.  Everything after the rectangles is optional and each marker
+ * appears at most once, which is what lets `splitLayer` take them off the end
+ * one at a time without a parser.
+ */
+export function encodeLayer({ cells, rects, ramps = [], corners = '....', disc = '' }) {
+  // A bore is the whole storey. Nothing else in the layer survives it, and
+  // saying so in the encoding is better than encoding something that decode
+  // will refuse.
+  if (disc === 's' || disc === 'b') return '*' + disc;
+  const owned = new Set(ownedCells(corners).map(([i, j]) => idx(i, j)));
+  const paint = cells && owned.size
+    ? cells.map((v, k) => (owned.has(k) ? 0 : v))
+    : cells;
+  let s = (rects || rectsInYards(paint)).map(encRect).join('');
+  if (corners && corners !== '....') s += '~' + corners;
+  if (disc) s += '*' + disc;
   if (ramps.length) s += '!' + ramps.map(encRamp).join('');
   return s || '-';
 }
@@ -217,19 +282,52 @@ export function decodeDrawn(recipe, { allowEmpty = false } = {}) {
   // cast, disastrous here: the block would be invisible, stop every ray, and
   // reserve its cell.  The board of course starts blank, which is why it asks
   // for `allowEmpty`; a RECIPE may not be.
-  if (!allowEmpty && !layers.some((L) => L.rects.length || L.ramps.length)) {
+  if (!allowEmpty && !layers.some((L) => L.rects.length || L.ramps.length || L.disc || L.corners !== '....')) {
     return bad(recipe, 'a drawing with no stone in it is not a block');
   }
   return { ok: true, family: 'drawn', layers, mat: parts[2], recipe };
 }
 
-function parseLayer(src, recipe, li) {
-  const [body, ramps = ''] = src.split('!');
-  const where = `layer ${li}`;
+/** Take the optional trailers off the end, one marker at a time. */
+function splitLayer(src) {
+  let body = src, ramps = '', disc = '', corners = '';
+  let i = body.indexOf('!');
+  if (i >= 0) { ramps = body.slice(i + 1); body = body.slice(0, i); }
+  i = body.indexOf('*');
+  if (i >= 0) { disc = body.slice(i + 1); body = body.slice(0, i); }
+  i = body.indexOf('~');
+  if (i >= 0) { corners = body.slice(i + 1); body = body.slice(0, i); }
+  return { body, corners, disc, ramps };
+}
 
+function parseLayer(src, recipe, li) {
+  const { body, corners, disc, ramps } = splitLayer(src);
+  const where = `layer ${li}`;
+  const fill = new Uint8Array(N * N);
+
+  /* ------------------------------------------------------------- the disc */
+  if (disc && !DISCS[disc]) return bad(recipe, `${where}: no such disc: ${disc}`);
+  const solidDisc = disc === 's' || disc === 'b';
+  if (solidDisc && (body || corners || ramps)) {
+    return bad(recipe, `${where}: a ${DISCS[disc]} is the whole storey — there is nothing left to put beside it`);
+  }
+  if (solidDisc) {
+    return { rects: [], ramps: [], corners: '....', disc, cells: new Uint8Array(N * N).fill(1) };
+  }
+
+  /* --------------------------------------------------------- the corners */
+  let corner = '....';
+  if (corners) {
+    if (corners.length !== 4) return bad(recipe, `${where}: a corner string is four characters, one per corner; this is ${corners.length}`);
+    for (const ch of corners) if (!CORNER_TOKENS.includes(ch)) return bad(recipe, `${where}: no such corner: ${ch}`);
+    corner = corners;
+    // A token OWNS its cell, so claim it before anything else can.
+    for (const [i, j] of ownedCells(corner)) fill[idx(i, j)] = 1;
+  }
+
+  /* ------------------------------------------------------ the rectangles */
   if (body.length % 4) return bad(recipe, `${where}: ${body.length} characters is not a whole number of rectangles`);
   const rects = [];
-  const fill = new Uint8Array(N * N);
   for (let k = 0; k < body.length; k += 4) {
     const r = [UNHY(body[k]), UNHY(body[k + 1]), UNHY(body[k + 2]), UNHY(body[k + 3])];
     const why = stamp(fill, r, where, 'rectangle');
@@ -237,14 +335,24 @@ function parseLayer(src, recipe, li) {
     rects.push(r);
   }
 
+  // A drum stands in the middle of the room, so the middle of the room has to
+  // be empty. Claimed after the rectangles so the message names the drum.
+  if (disc === 'd') {
+    for (const [i, j] of drumCells()) {
+      if (fill[idx(i, j)]) return bad(recipe, `${where}: a drum stands on the axis, and there is masonry in the way`);
+      fill[idx(i, j)] = 1;
+    }
+  }
+
+  /* ------------------------------------------------------------ the ramps */
   if (ramps.length % 5) return bad(recipe, `${where}: ${ramps.length} characters is not a whole number of ramps`);
   const out = [];
   for (let k = 0; k < ramps.length; k += 5) {
     const box = [UNHY(ramps[k]), UNHY(ramps[k + 1]), UNHY(ramps[k + 2]), UNHY(ramps[k + 3])];
     const dir = ramps[k + 4];
     if (!DIRS.includes(dir)) return bad(recipe, `${where}: no such ramp direction: ${dir}`);
-    // The fill and the ramps share one mask, so a ramp standing in the fill and
-    // a ramp standing in another ramp are the same refusal.
+    // The fill, the corners, the drum and the ramps all share one mask, so
+    // every way of putting two solids in the same place is the same refusal.
     const why = stamp(fill, box, where, 'ramp');
     if (why) return bad(recipe, why);
     const run = dir === 'e' || dir === 'w' ? box[2] - box[0] : box[3] - box[1];
@@ -253,7 +361,7 @@ function parseLayer(src, recipe, li) {
     }
     out.push({ x0: box[0], y0: box[1], x1: box[2], y1: box[3], dir, run });
   }
-  return { rects, ramps: out, cells: fill };
+  return { rects, ramps: out, corners: corner, disc, cells: fill };
 }
 
 /** Mark a rectangle's cells, and report the first thing wrong with it. */
@@ -278,9 +386,14 @@ function stamp(mask, [x0, y0, x1, y1], where, what) {
 
 /** A short label for the shelf.  Never an identity — the recipe is that. */
 export function labelDrawn(d) {
-  const parts = d.layers.map((L) => L.rects.length);
+  const parts = d.layers.map((L) => (L.disc && L.disc !== 'd' ? DISCS[L.disc] : L.rects.length));
+  const extra = [];
   const ramps = d.layers.reduce((n, L) => n + L.ramps.length, 0);
-  return `drawn ${parts.join('·')}${ramps ? ` +${ramps} ramp${ramps > 1 ? 's' : ''}` : ''}`;
+  const rounds = d.layers.reduce((n, L) => n + [...L.corners].filter((c) => c !== '.').length, 0);
+  if (ramps) extra.push(`${ramps} ramp${ramps > 1 ? 's' : ''}`);
+  if (rounds) extra.push(`${rounds} round${rounds > 1 ? 's' : ''}`);
+  if (d.layers.some((L) => L.disc === 'd')) extra.push('drum');
+  return `drawn ${parts.join('·')}${extra.length ? ` +${extra.join(' +')}` : ''}`;
 }
 
 /* -------------------------------------------------------------- the stone */
@@ -290,13 +403,37 @@ export function labelDrawn(d) {
 export function drawnMesh(d) {
   const m = new Mesh();
   d.layers.forEach((L, i) => {
-    for (const r of L.rects) {
-      extrudePlan(m, [rect(r[0], r[1], r[2], r[3])], DECKS[i], DECKS[i + 1], d.mat, `layer${i}`);
-    }
-    for (const r of L.ramps) rampWedge(m, r, DECKS[i], d.mat, `ramp${i}`);
+    const z0 = DECKS[i], z1 = DECKS[i + 1];
+    for (const r of L.rects) extrudePlan(m, [rect(r[0], r[1], r[2], r[3])], z0, z1, d.mat, `layer${i}`);
+    // THE CURVES GO UP THE SAME WAY THE SQUARES DO. A corner round and a drum
+    // are plans like any other — the only thing curved about them is the list
+    // of points — so they are extruded by the same call and there is no path in
+    // here that a rectangle does not also take.
+    for (const p of cornerPolys(L.corners)) extrudePlan(m, [p], z0, z1, d.mat, `round${i}`);
+    for (const p of discPolys(L.disc)) extrudePlan(m, [p], z0, z1, d.mat, `disc${i}`);
+    for (const r of L.ramps) rampWedge(m, r, z0, d.mat, `ramp${i}`);
   });
   tagFlat(m);
   return m;
+}
+
+/** The polygons a corner string stands for — `plan.js` owns their geometry. */
+export function cornerPolys(corners = '....') {
+  const out = [];
+  for (let k = 0; k < 4; k++) {
+    if (corners[k] === 'o') out.push(columnAt(k));
+    else if (corners[k] === 'c') out.push(coveAt(k));
+  }
+  return out;
+}
+
+/** …and the disc's. `bored` is already cut on the diagonals into four disjoint
+ *  pieces, because the mesh has no notion of a hole. */
+export function discPolys(disc) {
+  if (disc === 'd') return drum();
+  if (disc === 's') return bored(R);
+  if (disc === 'b') return bored(R_WHOLE);
+  return [];
 }
 
 /**

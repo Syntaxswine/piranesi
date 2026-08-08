@@ -61,11 +61,30 @@ test('two blocks meet exactly when a wall of one answers a wall of the other', (
   const solid = get('S:full,full,full:stone');
   assert.ok(meets(solid, solid), 'two solid blocks stand side by side');
 
-  // The one dead end in the grammar: its wall is a curved band only `rounded`
-  // makes, and `rounded` is four-fold symmetric, so there is one such block.
-  const lone = get('S:rounded,rounded,rounded:stone');
-  assert.ok(!sheets.some((s) => s !== lone && meets(lone, s)),
-    'the all-rounded block meets nothing but itself');
+  // THE ONE DEAD END IN THE GRAMMAR IS GONE, and this is where it went.
+  //
+  // At R = 2.5 the all-rounded block met NOTHING but itself: its wall was a
+  // curved band — `chamfer`, `011111110` — that only `rounded` made, and
+  // `rounded` is four-fold symmetric, so there was exactly one such block and
+  // nothing in 66,920 could stand beside it.
+  //
+  // At R = 2 the round bites less than a whole sub-block out of the corner, so
+  // the wall reads as solid and `rounded` speaks `wall` like everything else.
+  // The owner changed the radius for legibility; closing the only isolated
+  // block in the grammar was a side effect nobody asked for.
+  const wasLonely = get('S:rounded,rounded,rounded:stone');
+  const answers = sheets.filter((s) => s !== wasLonely && meets(wasLonely, s));
+  assert.ok(answers.length > 1000,
+    `the all-rounded block used to meet nothing; it now meets ${answers.length}`);
+
+  // …and NOTHING in the grammar is isolated any more. This is the claim that
+  // matters — it is what "the cube law works" finally means without a footnote.
+  //
+  // Read off `reach`, which `joinery` has already indexed by wall pattern.
+  // Asking `meets` for every pair is 66,920² and would take longer than the
+  // rest of the suite put together for an answer already on the sheet.
+  const lonely = sheets.filter((s) => s.reach === 0);
+  assert.deepEqual(lonely.map((s) => s.recipe), [], 'no block may meet nothing');
 });
 
 test('sockets cover all four turns, so a block may be rotated to fit', () => {

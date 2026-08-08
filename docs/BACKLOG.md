@@ -200,13 +200,27 @@
 > `extrudePlan` moved to `plan.js` and `DECKS` to `cube.js` so the two composers
 > raise stone by the same act. Every archive tool byte-identical afterwards.
 >
-> **0k (NEW). The board cannot draw a curve.** Seven plans of twenty-four are
-> unreachable on it — `rounded`, `drum`, `quarters`, `shaft`, `bore`, and
-> (less obviously, so it is worth knowing) `wall-tee` and `wall-curve`, whose
-> far corners are quarter-columns struck at R. The legal centres are enumerable
-> — the four block corners, the four arc centres and the axis — so a *round this
-> corner at R* modifier on a painted cell is a small, bounded addition. It is
-> the largest gap in the board.
+> ~~**0k. The board cannot draw a curve.**~~ — **DONE, and R = 2 is why.**
+> The owner settled the parked radius the same day: *"we got rid of the 2.5
+> corner and reduced it down to a radius of 2."* At 2.5 a corner arc crossed its
+> edges between the planes at 2 and 3; at 2 it crosses ON them, **the corner
+> cell is exactly R × R**, and a corner round became a property of one cell —
+> `~occo`, `o` a column and `c` a cove. The centred circle cannot be a cell at
+> any radius, so it is a per-storey disc: `*d` drum, `*s` shaft, `*b` bore. The
+> board now draws every plan in the vocabulary and the test says so plan by
+> plan, with no exclusions.
+>
+> **0p (NEW). Re-tune `docs/kit-spec.json` for the wider vocabulary.** 17 edge
+> words instead of 15 took the hundred from 96/100 fully flush to 82/100. Still
+> one component, still tiles perfectly — but the spec has not been argued with
+> since the words changed.
+>
+> **0q (NEW). The sole-source penalty inverted and nobody knows why.** At
+> R = 2.5 a block showing a word only one plan made reached 8× less than
+> average, and that was the mechanism of isolation. At R = 2 it reaches 1.16×
+> less — and its WORST case is *better* than the general worst case (reach 6
+> against 0.25). So something else now sets the floor on how placeable a block
+> is, and the census does not say what.
 >
 > **0l (NEW). The board cannot draw an arch.** `A:` springs at 4.5 and crowns on
 > the boundary, which is a vertical freedom the three-storey extrusion does not

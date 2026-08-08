@@ -46,7 +46,7 @@ const STEPS = 10;
 
 /** The legal cuts a rectilinear plan may use: his coloured lines, minus the two
  *  ends.  In sub-blocks, because that is the unit he specified them in. */
-export const CUTS = [2, 2.5, 3, 4.5, 6, 6.5, 7];
+export const CUTS = PLANES.slice(1, -1);
 
 /* ------------------------------------------------------- plan into stone -- */
 
@@ -197,6 +197,52 @@ function quarterAt(cx, cy, k) {
   return [[cx, cy], ...arc(cx, cy, R, k * Math.PI / 2, (k + 1) * Math.PI / 2, STEPS)];
 }
 
+/* -------------------------------------------------------- the four corners */
+
+/**
+ * THE CORNER CELL IS EXACTLY R BY R, and that is the whole reason a corner
+ * round can be drawn by hand.
+ *
+ * At R = 2.5 an arc struck about a block corner crossed its edges at 2.5, which
+ * fell between the slice planes at 2 and 3 — so a round was a property of the
+ * whole block and there was no way to ask for one corner of it. At R = 2 it
+ * crosses at 2 and 7, which ARE planes, so the square between 0 and 2 in both
+ * axes contains the entire arc and nothing else. One cell, one curve.
+ *
+ * Both curved states live here, once, because three things need them and had
+ * better agree: `quarters`, `rounded`, and the drawing board.
+ *
+ *   COLUMN  the quarter-disc struck about the block's own corner — convex, the
+ *           engaged shaft that four blocks meeting at an arris grow between
+ *           them.  This is what he means by "columns instead of turrets".
+ *   COVE    the same cell with its outer arris rounded off instead — the arc is
+ *           struck about the cell's INNER corner, so the block corner is cut
+ *           away.  This is `rounded`, one corner at a time.
+ *
+ * They are not complements: each covers πR²/4 of the R² cell. They are the two
+ * ways a quarter-circle can sit in a square.
+ */
+export const CORNERS = [
+  { at: [0, 0], in: [R, R], k: 0 },
+  { at: [S, 0], in: [S - R, R], k: 1 },
+  { at: [S, S], in: [S - R, S - R], k: 2 },
+  { at: [0, S], in: [R, S - R], k: 3 },
+];
+
+/** The quarter-column at corner `k`. Byte-identical to `quarters()`' piece. */
+export function columnAt(k) {
+  const c = CORNERS[k];
+  return quarterAt(c.at[0], c.at[1], c.k);
+}
+
+/** The corner cell at `k` with its outer arris rounded — `rounded`'s corner.
+ *  The arc runs between the same two points `roundedPlan` uses, and there is a
+ *  test that the four of them plus the middle ARE `rounded`. */
+export function coveAt(k) {
+  const [cx, cy] = CORNERS[k].in;
+  return [...arc(cx, cy, R, (k + 2) * Math.PI / 2, (k + 3) * Math.PI / 2, STEPS), [cx, cy]];
+}
+
 /* -------------------------------------------------------------- curved --- */
 
 /**
@@ -231,12 +277,7 @@ export function drum() {
  *  meeting at an arris grow one whole shaft between them and none of them knew
  *  about the others. */
 export function quarters() {
-  return [
-    [[0, 0], ...arc(0, 0, R, 0, Math.PI / 2, STEPS)],
-    [[S, 0], ...arc(S, 0, R, Math.PI / 2, Math.PI, STEPS)],
-    [[S, S], ...arc(S, S, R, Math.PI, Math.PI * 1.5, STEPS)],
-    [[0, S], ...arc(0, S, R, Math.PI * 1.5, Math.PI * 2, STEPS)],
-  ];
+  return CORNERS.map((_, k) => columnAt(k));
 }
 
 /** The square with the R2.5 circle bored out of the middle, cut on the
@@ -278,7 +319,11 @@ export const PLANS = {
   tee: { make: () => tee(3), turns: 4 },
   cross: { make: () => cross(3), turns: 1 },
   frame: { make: () => frame(2), turns: 1 },
-  notch: { make: () => notch(3, 2.5), turns: 4 },
+  // The bite used to be 2.5 deep, which is a plane that no longer exists. Three
+  // is the honest replacement: it lands on the thirds, which is the whole point
+  // of the simplification, and the DEPTH of a bite that reaches the edge does
+  // not touch that side's edge word either way — so this costs no vocabulary.
+  notch: { make: () => notch(3, 3), turns: 4 },
   // The wall family — the owner's archetypes 4, 8, 16, 20, 36 and the single
   // pier. Adding a plan is free by the grammar's own contract: no existing
   // recipe mentions these, so nothing already built changes.

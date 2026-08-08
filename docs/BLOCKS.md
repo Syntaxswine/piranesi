@@ -30,7 +30,7 @@ happens here. See `js/recipe.js`.
 | `S:wall-ell/3,tee,quarters:stone` | stack | 80 | — |
 | `S:wall/3,rounded,wall-ell/3:stone` | stack | 64 | +x@2,1.6 -y@2,4.6 -y@4.5,7.6 |
 | `S:rounded,bar-wide,bore:stone` | stack | 108 | — |
-| `A:y+:quarters:stone` | arch | 88 | +x@7,1.6 |
+| `A:y+:quarters:stone` | arch | 88 | -x@2,7.6 |
 | `S:bore,wall-ell/1,full:stone` | stack | 74 | +y@4.5,7.6 +x@2,1.6 -x@7,1.6 |
 | `S:twin/1,wall-ell/2,bar:stone` | stack | 30 | +x@7,1.6 -x@2,1.6 |
 | `A:yr:twin:stone` | arch | 28 | +x@2,7.6 |

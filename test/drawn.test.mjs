@@ -9,14 +9,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { SUB, PLANES, DECKS } from '../js/cube.js';
-import { PLANS, PLAN_IDS, planIsLegal } from '../js/plan.js';
+import { SUB, PLANES, DECKS, R } from '../js/cube.js';
+import { PLANS, PLAN_IDS, planIsLegal, columnAt, coveAt } from '../js/plan.js';
 import { LAYERS as RECIPE_LAYERS, decode, label } from '../js/recipe.js';
 import { blockFromRecipe } from '../js/stack.js';
 import { maskFor, solidityMask } from '../js/solidity.js';
 import { Mesh } from '../js/mesh.js';
 import {
-  SLICES, N, LAYERS, RISE, DIRS, HY, UNHY, idx,
+  SLICES, N, LAYERS, RISE, DIRS, HY, UNHY, idx, cellBox, CORNER_CELLS,
   blank, cellsToRects, rectsInYards, cellsFromRects,
   encodeDrawn, decodeDrawn, drawnMesh, rampWedge, planeIndex,
 } from '../js/drawn.js';
@@ -97,33 +97,93 @@ test('cells survive the round trip through yards', () => {
 
 /* ------------------------------------------------- drawn == named, exactly */
 
-test('a drawn plan and the named plan it copies are the SAME BLOCK', () => {
-  // THE ONE THAT MATTERS. Rasterise each rectilinear plan onto the slice grid,
-  // draw it back as rectangles, stack three of them, and the solidity mask must
-  // be identical to `S:<plan>,<plan>,<plan>`. Same lattice, same stone.
-  //
-  // It also says something about the VOCABULARY: a plan that fails here has a
-  // coordinate the slice grid cannot express, which would be a finding about
-  // that plan and not about the board.
-  // THE BOARD HAS NO ARCS, and this list is the honest statement of what that
-  // costs: seven plans of twenty-four cannot be drawn on it. `wall-tee` and
-  // `wall-curve` are in here for a reason worth knowing — they look rectilinear
-  // and are not, because their far corners are quarter-columns struck at R.
-  const curved = new Set(['rounded', 'drum', 'quarters', 'shaft', 'bore', 'wall-tee', 'wall-curve']);
-  const rectilinear = PLAN_IDS.filter((id) => !curved.has(id));
-  assert.ok(rectilinear.length >= 16, 'most of the vocabulary is rectilinear');
+/**
+ * THE BOARD CAN DRAW EVERY PLAN IN THE VOCABULARY, and this is where that is
+ * said out loud. The curved ones need a token; here is which.
+ *
+ * It was seven plans short until R came down to 2. At 2.5 a corner arc crossed
+ * its edges at 2.5, between the planes at 2 and 3, so a round was a property of
+ * the whole block and there was no way to ask for one corner of it. At 2 it
+ * crosses at 2 and 7, the corner cell is exactly R by R, and a round becomes a
+ * property of ONE CELL. That is the whole of why the circles work now.
+ */
+const CURVED = {
+  quarters: () => '~oooo',
+  rounded: () => allButCorners() + '~cccc',
+  drum: () => '*d',
+  shaft: () => '*s',
+  bore: () => '*b',
+  'wall-tee': () => encRect([0, 6, 9, 9]) + '~oo..',
+  'wall-curve': () => encRect([0, 6, 9, 9]) + encRect([6, 0, 9, 6]) + '~o...',
+};
 
-  for (const id of rectilinear) {
-    const cells = rasterise(PLANS[id].make());
-    const layer = rectsInYards(cells).map(encRect).join('');
+/** The square with the four corner cells left out — `rounded`'s middle. */
+function allButCorners() {
+  const cells = new Uint8Array(N * N).fill(1);
+  for (const [i, j] of CORNER_CELLS) cells[idx(i, j)] = 0;
+  return rectsInYards(cells).map(encRect).join('');
+}
+
+test('a drawn plan and the named plan it copies are the SAME BLOCK', () => {
+  // THE ONE THAT MATTERS. Draw each plan on the slice grid — rasterised into
+  // rectangles for the straight ones, with a corner or disc token for the
+  // curved ones — stack three of it, and the solidity mask must be identical to
+  // `S:<plan>,<plan>,<plan>`. Same lattice, same stone.
+  //
+  // No exclusions. A plan that fails here has a coordinate the board cannot
+  // express, which would be a finding about the VOCABULARY, not about the test.
+  for (const id of PLAN_IDS) {
+    const layer = CURVED[id] ? CURVED[id]() : rectsInYards(rasterise(PLANS[id].make())).map(encRect).join('');
     const drawn = `D:${layer},${layer},${layer}:stone`;
     const named = `S:${id},${id},${id}:stone`;
 
+    const d = decode(drawn);
+    assert.ok(d.ok, `${id}: ${drawn} — ${d.why}`);
     const a = blockFromRecipe(named);
     const b = blockFromRecipe(drawn);
     assert.ok(b, `${drawn} must build (${id})`);
     assert.ok(same(maskFor(a), maskFor(b)),
       `${id}: the drawn block is a different block from the named one`);
+  }
+});
+
+test('the corner cell is exactly R by R, which is why a round is one cell', () => {
+  // The claim the whole curve feature rests on, checked against the geometry
+  // rather than asserted in a comment. If R and the ladder ever disagree again,
+  // this is the line that says so.
+  for (const [i, j] of CORNER_CELLS) {
+    const [x0, y0, x1, y1] = cellBox(i, j);
+    assert.equal(x1 - x0, R, `corner cell ${i},${j} is ${x1 - x0} wide, not R`);
+    assert.equal(y1 - y0, R, `corner cell ${i},${j} is ${y1 - y0} deep, not R`);
+  }
+  // …and both curves live wholly inside it.
+  for (let k = 0; k < 4; k++) {
+    for (const poly of [columnAt(k), coveAt(k)]) {
+      const [ci, cj] = CORNER_CELLS[k];
+      const [x0, y0, x1, y1] = cellBox(ci, cj);
+      for (const [x, y] of poly) {
+        assert.ok(x >= x0 - 1e-9 && x <= x1 + 1e-9 && y >= y0 - 1e-9 && y <= y1 + 1e-9,
+          `corner ${k}: a point at ${x},${y} is outside its cell ${x0},${y0},${x1},${y1}`);
+      }
+    }
+  }
+});
+
+test('a column and a cove are the two ways a quarter-circle sits in a square', () => {
+  // They are NOT complements — each covers a quarter-disc of the R² cell — and
+  // knowing that is what stops someone "simplifying" one into the other.
+  for (let k = 0; k < 4; k++) {
+    const area = (poly) => Math.abs(poly.reduce((s, [x, y], i) => {
+      const [px2, py2] = poly[(i + 1) % poly.length];
+      return s + (x * py2 - px2 * y);
+    }, 0)) / 2;
+    const quarter = Math.PI * R * R / 4;
+    // The tessellation is what gets built, so it comes in a little under the
+    // true quarter-disc; 4% at ten steps.
+    for (const poly of [columnAt(k), coveAt(k)]) {
+      assert.ok(Math.abs(area(poly) - quarter) < quarter * 0.05,
+        `corner ${k}: ${area(poly).toFixed(3)} against a quarter-disc of ${quarter.toFixed(3)}`);
+    }
   }
 });
 
@@ -181,6 +241,14 @@ test('the grammar refuses every drawing that would build a broken block', () => 
     ['D:00i,-,-:stone', /whole number of rectangles/],
     ['D:00ii,-,-:marble', /no such material/],
     ['D:00ii!00i6e,-,-:stone', /overlaps/],        // a ramp standing in the fill
+    // The curves obey the same one rule: one occupant per cell.
+    ['D:0044~o...,-,-:stone', /overlaps/],         // a rectangle under a corner round
+    ['D:~ooo,-,-:stone', /four characters/],
+    ['D:~oooo.,-,-:stone', /four characters/],
+    ['D:~ooz.,-,-:stone', /no such corner/],
+    ['D:*z,-,-:stone', /no such disc/],
+    ['D:00ii*s,-,-:stone', /whole storey/],        // a bore takes no paint
+    ['D:00ii*d,-,-:stone', /masonry in the way/],  // a drum standing in a solid floor
   ];
   for (const [rec, why] of cases) {
     const d = decode(rec);

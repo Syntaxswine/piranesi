@@ -30,8 +30,13 @@
 //
 //   magenta   0, 9            the block boundary
 //   black     3, 6            thirds
-//   green     2, 4.5, 7       the tangents of the centred R2.5 circle, and the axis
+//   green     2, 4.5, 7       the tangents of the centred circle, and the axis
 //   ticks     2.5, 6.5        where a corner-struck R2.5 arc crosses an edge
+//
+// THE TICKS ARE GONE.  He reduced the corner radius to 2 on 2026-08-07, and a
+// corner arc of radius 2 crosses at 2 and 7 — the green lines, already there.
+// The reading below is of the ORIGINAL drawing and is left as measured; what
+// changed is one number, and R and PLANES below say what it changed to.
 //
 // Every one of those checked out against the photograph to better than 1.5% of
 // the block's width, which is as close as a felt pen on graph paper gets.  The
@@ -84,20 +89,42 @@ export const BLOCK_METRES = SUB * METRES_PER_SUB;       // 8.2296 m — a man is
 /**
  * THE TWO RADII.  There are no others, and that is the whole of the rule.
  *
- * R is two and a half YARDS — 2.29 m — and it does shafts, engaged columns,
- * corner rounds, niches and the ribs of a cross vault.  R_WHOLE is four and a
- * half, which in a block of nine is exactly half, so its circle is inscribed
- * and tangent to all four faces at their midpoints.  That is the one he means
- * for high vaulted arches: NINE YARDS OF SPAN, eight and a quarter metres, the
- * largest arc a single block can hold — and a run of them is a barrel a man is
- * a fifth as tall as.
+ * R IS TWO YARDS — 1.83 m.  IT WAS 2.5, AND THE OWNER CHANGED IT, 2026-08-07:
  *
- * Because R_WHOLE is exactly SUB/2, an arch struck with it
- * springs and crowns ON the boundary planes, so two neighbours agree at the
- * seam by construction — the same property that made the old sliced-vault tiles
- * cancel their cut faces, recovered without slicing anything.
+ *   "how do you feel about reducing the 1/4 circles in the corners of the cube
+ *    down from 2.5 to 2 yards in radius?"
+ *   "2&3 are fairly close enough as it is that i worry that adding 2.5 will
+ *    make it hard to tell which is which when eyeballing blocks.  the main
+ *    thing i see the corner ones being used for is columns instead of
+ *    turrets/towers, so i figured if we simplify having them be a little
+ *    smaller makes sense"
+ *   "we got rid of the 2.5 corner and reduced it down to a radius of 2."
+ *
+ * THE MEASUREMENT SAID THE SAME THING, from a different direction: at block
+ * resolution `ell(2.5)` and `ell(3)` emit the identical edge word, and so do
+ * `ell(6.5)` and `ell(7)`.  The half-yard planes expressed nothing their whole
+ * yard neighbours did not, so dropping them cost exactly zero vocabulary — see
+ * HANDOFF-2026-08-07 §6.1 for the numbers.
+ *
+ * AND THE LADDER CLOSES ON ITSELF.  A corner-struck arc of radius 2 crosses its
+ * edges at 2 and 7, which are already the green lines; there is no longer a
+ * plane that exists only to catch an arc.  Seven planes, six cells across, and
+ * THE CORNER CELL IS EXACTLY R BY R — which is what lets a corner round be a
+ * property of one cell on the drawing board instead of a whole-block form.
+ *
+ * R does shafts, engaged columns, corner rounds, niches and the ribs of a cross
+ * vault.  R_WHOLE is four and a half, which in a block of nine is exactly half,
+ * so its circle is inscribed and tangent to all four faces at their midpoints.
+ * That is the one he means for high vaulted arches: NINE YARDS OF SPAN, eight
+ * and a quarter metres, the largest arc a single block can hold — and a run of
+ * them is a barrel a man is a fifth as tall as.
+ *
+ * Because R_WHOLE is exactly SUB/2, an arch struck with it springs and crowns ON
+ * the boundary planes, so two neighbours agree at the seam by construction — the
+ * same property that made the old sliced-vault tiles cancel their cut faces,
+ * recovered without slicing anything.
  */
-export const R = 2.5;                                   // 2.5 yd = 2.286 m
+export const R = 2;                                     // 2 yd = 1.829 m
 export const R_WHOLE = 4.5;                             // 4.5 yd = 4.115 m, == SUB/2
 
 /* ----------------------------------------------------------- the planes -- */
@@ -106,17 +133,23 @@ export const R_WHOLE = 4.5;                             // 4.5 yd = 4.115 m, == 
  * THE SLICE PLANES, in YARDS from a corner, per axis.  "by making slices happen at the colored
  * lines it makes it easier to find pieces that line up."
  *
- *   0, 9       the boundary          (magenta)
- *   3, 6       the thirds            (black)
- *   2, 7       tangents of a centred R2.5 circle   (green)
- *   4.5        the axis              (green) — and the whole-block circle's centre
- *   2.5, 6.5   a corner-struck R2.5 arc's crossings (his edge ticks)
+ *   0, 9       the boundary                              (magenta)
+ *   3, 6       the thirds                                (black)
+ *   2, 7       a corner-struck R2 arc's crossings, AND
+ *              the tangents he drew for the centred circle   (green)
+ *   4.5        the axis        (green) — and the whole-block circle's centre
+ *
+ * SEVEN, NOT NINE.  His ticks at 2.5 and 6.5 were where a corner arc of radius
+ * 2.5 met an edge; at radius 2 that happens at 2 and 7, which were already
+ * ruled.  So the two half-yard planes lost the only job they had, and he cut
+ * them — "2&3 are fairly close enough as it is".  Measured before and after:
+ * zero words of the interface vocabulary were lost.  See R above.
  *
  * Nothing in a primary form may end anywhere else.  A generator that wants a
  * wall at 3.7 does not get one; it gets 3 or 4.5, and so does every block that
  * will ever stand beside it.
  */
-export const PLANES = [0, 2, 2.5, 3, 4.5, 6, 6.5, 7, 9];
+export const PLANES = [0, 2, 3, 4.5, 6, 7, 9];
 export const PLANES_FEET = PLANES.map((v) => v * SUB_FEET);
 
 /**
