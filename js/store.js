@@ -154,7 +154,14 @@ export class Store {
     return `${n.toString(36)}-${Date.now().toString(36).slice(-4)}`;
   }
 
-  say(msg) { this.problems.push(msg); return msg; }
+  /** Complain. BOUNDED, because not every caller drains: the buildings list
+   *  reads every record and a corrupt one complains on every redraw, so an
+   *  unread queue would grow for as long as the tab is open. */
+  say(msg) {
+    if (this.problems[this.problems.length - 1] !== msg) this.problems.push(msg);
+    while (this.problems.length > 24) this.problems.shift();
+    return msg;
+  }
   drain() { const p = this.problems; this.problems = []; return p; }
 
   /**
@@ -407,7 +414,16 @@ export class Store {
       return {
         ...e,
         at: rec.at || null,
-        hash: rec.hash || hashOf(rec.world),
+        // RECOMPUTED, NEVER READ BACK. The record carries a `hash` and it would
+        // be free to trust it — and it is a derived quantity written down beside
+        // the thing it derives from, which is the bug this project keeps meeting
+        // (`plan.js` §MASS, `naming.js`, the building name that froze at boot).
+        // It drifted the first day it existed: widening the hash from thirteen
+        // characters to fourteen left every stored value lying, and `sameAs`
+        // would have stopped recognising every building already saved. The
+        // stored one is kept only for `saveBuilding`'s is-this-a-no-op check,
+        // where being wrong costs one unnecessary write.
+        hash: hashOf(rec.world),
         cells: (rec.world.cells || []).length,
         kinds: (rec.world.palette || []).length,
         token: rec.token || null,
@@ -506,13 +522,18 @@ export class Store {
     return true;
   }
 
+  /** THE INDEX GOES FIRST HERE, and everywhere else the record does.
+   *  Every other write wants a failure to leave an orphan the index can recover;
+   *  a deletion wants a failure to leave the building ALIVE. Delete the record
+   *  first and a failed index write leaves a name pointing at nothing. */
   removeBuilding(name) {
     const idx = this.index();
     const e = idx.find((x) => x.name === name);
     if (!e) return false;
+    if (!this.put(KEYS.index, idx.filter((x) => x.slug !== e.slug))) return false;
     this.del(bkey(e.slug));
     this.held.delete(e.slug);
-    return this.put(KEYS.index, idx.filter((x) => x.slug !== e.slug));
+    return true;
   }
 
   renameBuilding(from, to) {
@@ -644,7 +665,13 @@ export function hashOf(world) {
     a = Math.imul(a ^ c, 0x01000193);
     b = Math.imul(b ^ c, 0x85ebca6b) + 1 | 0;
   }
-  return ((a >>> 0).toString(36) + (b >>> 0).toString(36).padStart(7, '0')).slice(0, 13);
+  // BOTH HALVES PADDED, AND NOT TRUNCATED. A 32-bit number is at most seven
+  // characters in base 36, so padding each to seven makes the pair unambiguous
+  // and the result a fixed fourteen. The first version padded only the second
+  // half and then took the leading thirteen characters, which threw away five
+  // bits of a hash whose whole job is to answer "is this the same building".
+  const hex = (v) => (v >>> 0).toString(36).padStart(7, '0');
+  return hex(a) + hex(b);
 }
 
 /** Whether a stored view and a fresh one are the same view, to the precision a

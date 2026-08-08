@@ -467,6 +467,55 @@ test('an identical save is not a write, so the clock does not lie — BACKLOG 0x
   assert.equal(JSON.parse(s.getItem(bkey('a'))).view.layer, 3);
 });
 
+test('the content hash is a fixed width and keeps all of itself', () => {
+  // The first version padded the second half to seven characters, left the first
+  // unpadded, and then took the leading thirteen — which threw away five bits of
+  // the one number that decides whether an import is a copy of something already
+  // here. The length varying with the value is the tell.
+  const seen = new Set();
+  for (let i = 0; i < 400; i++) {
+    const h = hashOf({ format: FORMAT, palette: [], cells: [[i, i * 3, 0, 0]] });
+    assert.equal(h.length, 14, `${h} is ${h.length} characters, not 14`);
+    assert.equal(seen.has(h), false, `two different buildings hashed alike at ${i}`);
+    seen.add(h);
+  }
+});
+
+test('the hash a building reports is its CONTENT, not what was written beside it', () => {
+  // The record carries a `hash`, and trusting it would be free. It is also a
+  // derived quantity written down next to the thing it derives from, and it
+  // drifted on its first day: widening the hash from thirteen characters to
+  // fourteen left every stored value lying, so `sameAs` would have stopped
+  // recognising every building already saved.
+  const s = fakeStorage();
+  const store = new Store(s);
+  const w = { format: FORMAT, palette: [], cells: [[0, 0, 0, 0]] };
+  store.saveBuilding('a', w);
+  const rec = JSON.parse(s.getItem(bkey('a')));
+  rec.hash = 'a-lie-from-2019';
+  s.setItem(bkey('a'), JSON.stringify(rec));
+
+  assert.equal(store.summaries()[0].hash, hashOf(w), 'the label is regenerated on read');
+  assert.equal(store.sameAs(w).name, 'a', 'so an import still recognises it');
+});
+
+test('a deletion that cannot be written does not delete', () => {
+  // Every other write here puts the RECORD first, so a failure between the two
+  // leaves an orphan the index can recover. A deletion is the one that wants the
+  // opposite: fail, and the building must still be there.
+  const s = fakeStorage();
+  const store = new Store(s);
+  store.saveBuilding('the well', { format: FORMAT, palette: [], cells: [[0, 0, 0, 0]] });
+  const raw = s.setItem.bind(s);
+  s.setItem = (k, v) => {
+    if (k === KEYS.index) { const e = new Error('full'); e.name = 'QuotaExceededError'; throw e; }
+    return raw(k, v);
+  };
+  assert.equal(store.removeBuilding('the well'), false);
+  s.setItem = raw;
+  assert.equal(store.building('the well').world.cells.length, 1, 'still there, and still readable');
+});
+
 test('ago says something useful at every scale', () => {
   const t = Date.parse('2026-08-08T12:00:00Z');
   assert.equal(ago(null), 'never saved');
@@ -638,6 +687,16 @@ test("a piranesi/3 save's torches land on the same brackets — BACKLOG 0w", () 
   assert.deepEqual(lit(after), lit(survey(now, cat)));
   assert.match(back.anchorNote, /moved to the new naming/);
   assert.equal(back.indexed, 0, 'and it is not attempted twice');
+
+  // AND IT STAYS MOVED. The upgrade is only worth anything if the /4 file it
+  // produces reads back as itself — the failure this whole item is about is a
+  // torch that quietly walks one save at a time.
+  const saved = back.toJSON();
+  assert.equal(saved.format, 'piranesi/4');
+  assert.ok(saved.anchors.every(([k]) => !isIndexKey(k)));
+  const again = World.fromJSON(cat, saved, (r) => blockFromRecipe(r));
+  assert.equal(again.indexed, 0, 'nothing left for the upgrade to do');
+  assert.deepEqual(lit(survey(again, cat)), lit(after), 'the same brackets, a second time round');
 });
 
 test('a site the block no longer has is dropped, and said — BACKLOG 0w', () => {

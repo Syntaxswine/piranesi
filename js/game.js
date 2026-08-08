@@ -23,7 +23,7 @@
 
 import { World } from './world.js';
 import { buildCatalog, blockFromRecipe, add } from './stack.js';
-import { Store, buildingToFile, readFile, ago, bkey } from './store.js';
+import { Store, buildingToFile, readFile, ago, bkey, BPREFIX } from './store.js';
 import { download, pickFile } from './files.js';
 import { describe } from './naming.js';
 import { SUB } from './cube.js';
@@ -659,6 +659,22 @@ function okToLeave(what) {
     + `${state.conflict ? ' — another tab holds it' : ' — it loaded short'}.\n${what} anyway?`);
 }
 
+/**
+ * …AND CLOSING THE TAB IS ALSO LEAVING.
+ *
+ * There was never any need for this before: the autosave fired on every click
+ * and always went through, so a tab could be shut at any moment and lose
+ * nothing. Two of the things added this round can stop it, and the browser's
+ * own prompt is the only thing standing between "another tab holds this" and an
+ * hour going out with the window. The check is `unsaved()`, so a tab with
+ * nothing at stake still closes without a word.
+ */
+addEventListener('beforeunload', (e) => {
+  if (!unsaved() || !state.world.size) return;
+  e.preventDefault();
+  e.returnValue = '';                    // Safari and older Chrome want this
+});
+
 /** Open a building by name. A saved building brings its own blocks: `register`
  *  lets it put a recipe on the shelf this session's hand never dealt, which is
  *  the whole point of the palette. */
@@ -749,8 +765,13 @@ function buildings() {
     pick.title = b.broken
       ? 'this building would not read — its text is kept beside it'
       : `${b.cells} cells · ${b.kinds} kinds of block · ${b.hash}`;
+    // NO EXEMPTION FOR THE ONE ALREADY OPEN. A first version skipped the ask
+    // when the row was the current building, on the reasoning that re-opening it
+    // changes nothing — which is true only while everything is saved. Under a
+    // conflict or a lossy load it is the exact click that throws an hour away,
+    // and it is the likeliest one to be made absent-mindedly.
     pick.onclick = () => {
-      if (b.name !== state.open && !okToLeave(`Open "${b.name}"`)) return;
+      if (!okToLeave(`Open "${b.name}"`)) return;
       openBuilding(b.name);
       note(`opened "${b.name}"`);
     };
@@ -796,8 +817,9 @@ function note(msg) {
 
 $('#mode').onclick = () => setMode(state.mode === BUILD ? EXPLORE : BUILD);
 $('#clear').onclick = () => {
-  if (!confirm('Clear the whole building?')) return;
-  if (!okToLeave('Clear')) return;
+  // One question, not two: `okToLeave` already says what is at stake and asking
+  // twice trains people to click through both.
+  if (unsaved() ? !okToLeave('Clear the building') : !confirm('Clear the whole building?')) return;
   state.world = new World(catalog);
   save(); invalidate();
 };
@@ -875,6 +897,11 @@ $('#exportb').onclick = () => {
 };
 
 $('#importb').onclick = async () => {
+  // An import REPLACES the world, so it belongs with `new`, `clear` and the
+  // buildings list — every door out of a building that cannot currently be
+  // saved. Asked before the file picker, not after, so the question is not
+  // buried under a modal the player has already committed to.
+  if (!okToLeave('Import a building')) return;
   const picked = await pickFile();
   if (!picked) return;
   if (picked.error) return note(picked.error);
@@ -947,7 +974,21 @@ addEventListener('storage', (e) => {
    * so the tab that is about to lose finds out immediately instead of at the
    * bottom of the hour.
    */
-  if (state.open && e.key === bkey(store.slugFor(state.open))) {
+  // The prefix test FIRST: `slugFor` reads the index, and this handler fires for
+  // every key any tab writes — including the shelf, which the board writes on
+  // every stroke.
+  if (state.open && e.key && e.key.startsWith(BPREFIX)
+    && e.key === bkey(store.slugFor(state.open))) {
+    // DELETED IS NOT CHANGED. There is nothing to conflict with, and treating it
+    // as one would leave the player with no way out at all — "revert" has
+    // nothing to revert to and the autosave is blocked. Writing what is on
+    // screen back is the work-preserving answer, so let it.
+    if (e.newValue == null) {
+      store.takeOver(state.open);
+      state.conflict = false;
+      note(`"${state.open}" was deleted in another tab — what is on screen will be written back the next time you place something`);
+      return;
+    }
     if (state.conflict) return;
     state.conflict = true;
     note(`"${state.open}" has just been written by another tab. Nothing here will be `

@@ -598,10 +598,14 @@ export function repairFlush(kit, sheets, opts = {}) {
       .map((s) => ({ s, met: wallsMet(s, kit) }))
       .filter((x) => x.met < 4)
       .sort((a, b) => a.met - b.met);
+    // CLEARED BEFORE THE BREAK, not after it. Left below, the last pass to make
+    // a swap would leave its own diagnoses behind — including one for the block
+    // it had just fixed — and a kit that came out perfect would still report
+    // blocks as short.
+    left.length = 0;
     if (!short.length) break;
 
     let done = false;
-    left.length = 0;
     for (const { s, met } of short) {
       const rest = kit.filter((x) => x !== s);
       const answers = answersOf(rest);

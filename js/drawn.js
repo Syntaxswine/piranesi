@@ -50,7 +50,7 @@ import { Mesh } from './mesh.js';
 import { SUB, PLANES, DECKS, STOREY, R, R_WHOLE } from './cube.js';
 import {
   rect, extrudePlan, CORNERS, columnAt, coveAt, drum, bored,
-  PLANS, PLAN_IDS, turnPlan,
+  PLANS, PLAN_IDS,
 } from './plan.js';
 import { tagFlat } from './forms.js';
 
