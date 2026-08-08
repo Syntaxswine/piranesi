@@ -29,6 +29,37 @@
 > anything built first will be built twice. The rest of the list — the drawing,
 > staffage, ornament — is unaffected and safe to work on.
 >
+> ### ✅ Updated 2026-08-07 — THE WALL FAMILY, and the owner's 41 archetypes
+>
+> He coded the block set himself: four sides clockwise from twelve, each in
+> three segments, X solid and O open. **14 archetypes, 41 counting rotations.**
+> Measured against the grammar: only **6 of 13** existed.
+>
+> **The gap was the simplest piece in architecture.** The vocabulary had plans
+> with 0, 2, 3 and 4 complete walls and NOTHING with exactly one — `twin` is
+> literally two walls side by side and nobody ever wrote the single. Every
+> configuration starting from one wall was unreachable in consequence.
+>
+> Six plans added — `wall`, `wall-ell`, `wall-tee`, `wall-curve`,
+> `corners-two`, `stub` — taking it to **12 of 14**. Free by the grammar's own
+> contract: no existing recipe names them, so nothing already built changed.
+>
+> **Every piece of a plan must be DISJOINT.** Two overlapping rectangles are
+> crossed twice by the solidity ray, so parity reads the overlap as VOID: an L
+> built from two full-length walls came back with a hole where they meet. That
+> is why `bored` is cut into four and `frame` into four — the mesh has no notion
+> of a union.
+>
+> Effects: 10,826 → **45,276 blocks**; word-triples 1,030 → **1,764 of 2,197**;
+> two new edge words, both the owner's G/H (the 3 yd handed bar), each with
+> THREE makers so no new isolation; the 100-kit went from 92 to **96 of 100
+> fully flush**, still one component.
+>
+> **0j (NEW). Archetypes 24 and 28 are not cuttable.** Both need a corner
+> segment to read X while the adjacent side reads O — masonry filling 2 of the 3
+> cells nearest a corner but stopping before the block edge. That wants a plane
+> at **8** (and symmetrically **1**), and the ladder has neither.
+>
 > ### ✅ Updated 2026-08-07 (later still) — THE OPENINGS ARE INVENTORIED
 >
 > `docs/APERTURES.md`. The owner's reframe — *"think about it in terms of

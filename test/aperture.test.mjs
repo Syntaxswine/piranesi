@@ -22,17 +22,21 @@ const sheets = everyBlock().recipes.map((r) => measure(r, blockFromRecipe(r))).f
 const serve = joinery(sheets);
 const WALLS = ['-x', '+x', '-y', '+y'];
 
-test('the whole grammar speaks thirteen edge words, and ten carry it', () => {
-  // THE FINDING: of 512 possible nine-bit words the grammar uses 13, and three
+test('the whole grammar speaks fifteen edge words, and twelve carry it', () => {
+  // THE FINDING: of 512 possible nine-bit words the grammar uses 15, and three
   // of those occur only in arches. That is what turns "an opaque 81-bit wall
-  // pattern" into "three storeys, each one of ten words".
+  // pattern" into "three storeys, each one of twelve words".
+  //
+  // It was THIRTEEN until the wall family went in. The two it added are the
+  // owner's G/H — the 3 yd handed bar he had drawn and the grammar could not
+  // say — and they arrived with three makers each, so no new isolation.
   const seen = new Map();
   for (const side of WALLS) {
     for (const [key, set] of serve.get(side)) {
       for (const w of wordsOfWall(key)) seen.set(w, (seen.get(w) || 0) + set.size);
     }
   }
-  assert.equal(seen.size, 13, 'thirteen words, no more and no fewer');
+  assert.equal(seen.size, 15, 'fifteen words, no more and no fewer');
   for (const w of WORDS) assert.ok(seen.has(w.bits), `${w.name} must occur`);
   for (const w of ODD_WORDS) assert.ok(seen.has(w), 'the vestigial words are real, just rare');
 

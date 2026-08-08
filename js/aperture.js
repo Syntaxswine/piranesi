@@ -45,6 +45,11 @@ export const WORDS = [
   { bits: '000111111', name: 'jamb-r', gloss: 'the same, handed' },
   { bits: '001111100', name: 'island', gloss: '5 yd of masonry clear of both corners' },
   { bits: '011111110', name: 'chamfer', gloss: 'both arrises cut back one yard' },
+  // Arrived with the wall family, and they are the owner's G/H — the 3 yd
+  // handed bar he had drawn and the grammar could not say. Three makers each,
+  // so they add no new isolation.
+  { bits: '111000000', name: 'stop-l', gloss: 'masonry stops after 3 yd; 6 yd open' },
+  { bits: '000000111', name: 'stop-r', gloss: 'the same, handed' },
 ];
 
 /** Words that occur only in arches — the grammar's only irregular apertures. */

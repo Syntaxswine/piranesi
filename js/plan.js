@@ -106,6 +106,58 @@ export function notch(w = 3, d = 3) {
   ]];
 }
 
+/* ------------------------------------------------- the WALL family ------ */
+//
+// THE SIMPLEST PIECE IN ARCHITECTURE, AND IT WAS MISSING.  The vocabulary had
+// plans with 0, 2, 3 and 4 complete walls and NOTHING with exactly one: `twin`
+// is literally two of these side by side, and nobody ever wrote the single.
+// Every configuration that starts from one wall — an L of walls, a T, a curve —
+// was unreachable in consequence.
+//
+// Found by coding each plan the way the owner does, four sides clockwise from
+// twelve, each side in three segments, X for stone and O for open. Six of his
+// fourteen archetypes existed; these five close most of the gap.
+//
+// EVERY PIECE MUST BE DISJOINT.  Two overlapping rectangles are crossed twice
+// by the solidity ray, so parity reads the overlap as VOID: an L built from two
+// full-length walls came back with a hole where they meet. That is why `bored`
+// is cut into four and `frame` into four — the mesh has no notion of a union.
+
+/** A wall along one edge. `XXX XOO OOO OOX`. */
+export function wall(d = 3) { return [rect(0, S - d, S, S)]; }
+
+/** Two walls meeting at a corner — the second stops short of the first, or the
+ *  overlap punches a hole in the join. `XXX XXX XOO OOX`. */
+export function wallEll(d = 3) { return [rect(0, S - d, S, S), rect(S - d, 0, S, S - d)]; }
+
+/** A wall with a quarter-column at each far corner, so three sides read as an
+ *  opening between piers. `XXX XOX XOX XOX` — the owner's T intersection. */
+export function wallTee(d = 3) {
+  return [rect(0, S - d, S, S), quarterAt(0, 0, 0), quarterAt(S, 0, 1)];
+}
+
+/** Two walls at a corner plus the one column the far corner still needs.
+ *  `XXX XXX XOX XOX` — his L curve. */
+export function wallCurve(d = 3) {
+  return [rect(0, S - d, S, S), rect(S - d, 0, S, S - d), quarterAt(0, 0, 0)];
+}
+
+/** Masonry at two diagonally opposite corners and nothing else.
+ *  `XOO OOX XOO OOX` — his two corners. */
+export function cornersTwo(w = 3) {
+  return [rect(0, S - w, w, S), rect(S - w, 0, S, w)];
+}
+
+/** A single pier standing out from the middle of one side, the rest open.
+ *  `OOO OOO OOO OXO`. */
+export function stub(w = 3, d = 3) { return [rect((S - w) / 2, 0, (S + w) / 2, d)]; }
+
+/** One quarter-column, struck about a corner of the block. `k` is which
+ *  quadrant of the circle survives, counted anticlockwise from due east. */
+function quarterAt(cx, cy, k) {
+  return [[cx, cy], ...arc(cx, cy, R, k * Math.PI / 2, (k + 1) * Math.PI / 2, STEPS)];
+}
+
 /* -------------------------------------------------------------- curved --- */
 
 /**
@@ -188,6 +240,15 @@ export const PLANS = {
   cross: { make: () => cross(3), turns: 1 },
   frame: { make: () => frame(2), turns: 1 },
   notch: { make: () => notch(3, 2.5), turns: 4 },
+  // The wall family — the owner's archetypes 4, 8, 16, 20, 36 and the single
+  // pier. Adding a plan is free by the grammar's own contract: no existing
+  // recipe mentions these, so nothing already built changes.
+  wall: { make: () => wall(3), turns: 4 },
+  'wall-ell': { make: () => wallEll(3), turns: 4 },
+  'wall-tee': { make: () => wallTee(3), turns: 4 },
+  'wall-curve': { make: () => wallCurve(3), turns: 4 },
+  'corners-two': { make: () => cornersTwo(3), turns: 2 },
+  stub: { make: () => stub(3, 3), turns: 4 },
   rounded: { make: roundedPlan, turns: 1 },
   drum: { make: drum, turns: 1 },
   quarters: { make: quarters, turns: 1 },

@@ -12,16 +12,16 @@ been looked at.
 
 | | count | |
 |---|---:|---|
-| recipes | 79,016 | every string the grammar admits |
-| solids | 39,508 | …that differ as geometry. Material is a skin, so exactly half |
-| **blocks** | **10,826** | …that differ once you are allowed to **turn** one |
+| recipes | 351,904 | every string the grammar admits |
+| solids | 175,952 | …that differ as geometry. Material is a skin, so exactly half |
+| **blocks** | **45,276** | …that differ once you are allowed to **turn** one |
 
 Rotation is free at placement, so a block and the same block a quarter turn
-round are one block. That collapses 39,508 to 10,826 —
-**73% of any "every combination" catalogue is the same block relabelled.**
+round are one block. That collapses 175,952 to 45,276 —
+**74% of any "every combination" catalogue is the same block relabelled.**
 
-10,768 stacks · 58 arches · from 34 layer tokens
-(16 plans × their turns) in 3 layers · a block is 9 yards cubed,
+45,184 stacks · 92 arches · from 56 layer tokens
+(22 plans × their turns) in 3 layers · a block is 9 yards cubed,
 9×9×9 sub-blocks, all curves struck at R 2.5 or R 4.5.
 
 ## Self-checks
@@ -33,10 +33,10 @@ geometry every run, and nothing is written if one fails.
 | check | | |
 |---|---|---|
 | assembled mask === ray-cast mask | ✅ | 12 blocks, worst disagreement 0 cells of 729 |
-| declared turns === measured period | ✅ | all 16 plans agree |
-| turnArch === turning the mesh | ✅ | 204 arches checked |
-| walked orbits === Burnside count | ✅ | walked 10768, predicted 10768 |
-| the score discriminates | ✅ | 1 tied at the top of 10,826, 3,667 distinct scores |
+| declared turns === measured period | ✅ | all 22 plans agree |
+| turnArch === turning the mesh | ✅ | 336 arches checked |
+| walked orbits === Burnside count | ✅ | walked 45184, predicted 45184 |
+| the score discriminates | ✅ | 1 tied at the top of 45,276, 5,019 distinct scores |
 
 ## The alphabet
 
@@ -56,6 +56,12 @@ symmetry; `period` is what the footprint actually does.
 | `cross` | 1 | 1 | 0.56 | 45/81 |
 | `frame` | 1 | 1 | 0.69 | 56/81 |
 | `notch` | 4 | 4 | 0.91 | 75/81 |
+| `wall` | 4 | 4 | 0.33 | 27/81 |
+| `wall-ell` | 4 | 4 | 0.56 | 45/81 |
+| `wall-tee` | 4 | 4 | 0.45 | 39/81 |
+| `wall-curve` | 4 | 4 | 0.62 | 51/81 |
+| `corners-two` | 2 | 2 | 0.22 | 18/81 |
+| `stub` | 4 | 4 | 0.11 | 9/81 |
 | `rounded` | 1 | 1 | 0.93 | 77/81 |
 | `drum` | 1 | 1 | 0.24 | 21/81 |
 | `quarters` | 1 | 1 | 0.24 | 24/81 |
@@ -64,8 +70,8 @@ symmetry; `period` is what the footprint actually does.
 
 ## What is in there
 
-**Mass.** median 63% of the box is stone, mean 62%,
-range 20%–100%.
+**Mass.** median 54% of the box is stone, mean 54%,
+range 11%–100%.
 
 **Ways through** — how many axes you can get from one face to the opposite one
 through the void. A vocabulary of nothing but solids is a quarry.
@@ -80,10 +86,10 @@ it a shaft.
 
 | ways | roofed | unroofed |
 |---:|---:|---:|
-| 0 | 2,397 | 1,122 |
-| 1 | 3,720 | 2,036 |
-| 2 | 2,929 | 3,104 |
-| 3 | 1,780 | 4,564 |
+| 0 | 6,212 | 2,384 |
+| 1 | 16,569 | 5,780 |
+| 2 | 13,897 | 10,799 |
+| 3 | 8,598 | 26,313 |
 
 **Flush walls** — of a block's four sides, how many some *other* block can
 meet exactly, so the faces cancel and the seam disappears. This is the number
@@ -95,28 +101,28 @@ the cube law exists to produce.
 | 1 | 1 | 0% |
 | 2 | 17 | 0% |
 | 3 | 1 | 0% |
-| 4 | 10,806 | 100% |
+| 4 | 45,256 | 100% |
 
 ## The socket vocabulary
 
 Every block presents a 9×9 pattern of stone on each wall. Two blocks meet
 flush when the touching patterns are identical. Across the whole catalogue and
-all four turns there are **1,048 distinct wall patterns** —
-out of 43304 presented, so the vocabulary is far more concentrated
+all four turns there are **1,786 distinct wall patterns** —
+out of 181104 presented, so the vocabulary is far more concentrated
 than the block count suggests, which is why anything meets anything at all.
 
 The commonest, drawn as elevations — this is the wall you would be looking at,
 stone filled, void blank, nine sub-blocks across and nine up:
 
 ```
-976 blocks  614 blocks  614 blocks  614 blocks  434 blocks  434 blocks
-81/81       54/81       54/81       54/81       63/81       63/81
-#########   .........   #########   #########   ...###...   #########
-#########   .........   #########   #########   ...###...   #########
-#########   .........   #########   #########   ...###...   #########
-#########   #########   .........   #########   #########   ...###...
-#########   #########   .........   #########   #########   ...###...
-#########   #########   .........   #########   #########   ...###...
+4172 blocks 2532 blocks 2532 blocks 2532 blocks 2178 blocks 2178 blocks
+81/81       54/81       54/81       54/81       72/81       72/81
+#########   .........   #########   #########   ###...###   #########
+#########   .........   #########   #########   ###...###   #########
+#########   .........   #########   #########   ###...###   #########
+#########   #########   .........   #########   #########   ###...###
+#########   #########   .........   #########   #########   ###...###
+#########   #########   .........   #########   #########   ###...###
 #########   #########   #########   .........   #########   #########
 #########   #########   #########   .........   #########   #########
 #########   #########   #########   .........   #########   #########
@@ -133,7 +139,7 @@ three interchangeable. That tie is the cube law showing up as a number.
 
 ### The one block that meets nothing
 
-Out of 10,826, exactly **1** presents a wall that no other block can
+Out of 45,276, exactly **1** presents a wall that no other block can
 match on any of its four sides:
 
 > `S:rounded,rounded,rounded:stone`
@@ -163,24 +169,25 @@ The sort of thing a full walk turns up and a hand of twenty-four never would.
 
 ### A vault runs, but it cannot land
 
-The 58 arches are a **vocabulary island**, and this is the census's most
+The 92 arches are a **vocabulary island**, and this is the census's most
 actionable result. Their best block ranks
-4,703 of 10,826;
+6,784 of 45,276;
 their median is far below that. The reason is not that they are bad blocks.
 
 An arch presents two different kinds of face. Its **flanks** — the walls
-alongside the vault — are met by 67 blocks on average, because below the
+alongside the vault — are met by 253 blocks on average, because below the
 springing they are just the pier plan and stacks match that happily. Its **caps**
-— the ends of the tunnel — are met by 5.3.
+— the ends of the tunnel — are met by 8.6.
 
-Taking the best-scoring arch, `A:x+:tee/2:stone`, and asking what can meet the
-end of it: **4 blocks in the whole grammar, and every one of them is another
+Taking the best-scoring arch, `A:xl:corner/3:stone`, and asking what can meet the
+end of it: **10 blocks in the whole grammar, and every one of them is another
 arch.**
 
-> `A:x+:tee/2:stone`
-> `A:x+:bar:stone`
-> `A:x+:tee/1:stone`
-> `A:x+:cross:stone`
+> `A:xl:corner/1:stone`
+> `A:xl:stub/1:stone`
+> `A:xl:stub:stone`
+> `A:xl:wall/3:stone`
+> `A:xl:corner/2:stone`
 
 Which is half a success. A row of them cancels its shared caps and reads as one
 continuous barrel with no membranes between the bays — that is exactly what
@@ -194,19 +201,19 @@ instead of stopping in mid-air", but its hand chooses which *spandrel* survives
 wrong axis. What is missing is a **springer**: a stack-like block carrying the
 vault cross-section on one face and a slice-plane wall on the other.
 
-Related, and from the same gap: **34 of the 34 half-arches have nothing in the
+Related, and from the same gap: **0 of the 56 half-arches have nothing in the
 grammar that can stand on them** — their top face is half a spandrel and no
 block presents its match underneath.
 
 ### The rest
 
-- **2,397 (22%) have no way through at all** — walls and lumps. Wanted,
+- **6,212 (14%) have no way through at all** — walls and lumps. Wanted,
   in that proportion: the owner asked for blocks that are just solid space.
-- **3,472 (32%) carry less than half their own upper storeys** where one
+- **21,464 (47%) carry less than half their own upper storeys** where one
   slice hands over to the next. Legal, and this is Piranesi, so an impossibility
   is not a fault — but it should be the player's impossibility, not one the
-  generator hands out. `S:notch,drum,notch:stone`, `S:notch,drum,notch/1:stone`, `S:notch,corner/1,notch:stone`.
-- **2,620 (24%) offer nowhere to hang a chain.** Anchor sites need
+  generator hands out. `S:notch,drum,notch:stone`, `S:notch,drum,notch/1:stone`, `S:stub,shaft,wall-curve/1:stone`.
+- **11,375 (25%) offer nowhere to hang a chain.** Anchor sites need
   stone immediately behind them, so the airier blocks have none.
 - **0 blocks share a footprint with another** (0 groups) — so at this
   resolution every block in the grammar is distinguishable from every other.
@@ -219,7 +226,7 @@ open and every part is in the table beside it — argue with the weights, not th
 numbers.
 
 - **reach** — how many blocks meet its walls exactly, of a possible
-  975. Its faces being the common currency is what makes it
+  4171. Its faces being the common currency is what makes it
   worth reaching for
 - **deck** — the same question upward: can it join a vertical run
 - **way** — how many axes you can get through it on
@@ -239,49 +246,49 @@ walls are met to *how common* they are.
 
 | # | recipe | score | reach | deck | ways | anchors | stand | mass |
 |---:|---|---:|---:|---:|---:|---:|---:|---:|
-| 1 | `S:notch,drum,notch:stone` | 0.758 | 483 | 1155 | 3 | 2 | 44% | 70% |
-| 2 | `S:notch,drum,notch/1:stone` | 0.740 | 424 | 1155 | 3 | 2 | 44% | 70% |
-| 3 | `S:corner,notch,ell/2:stone` | 0.733 | 322 | 1156 | 3 | 3 | 59% | 68% |
-| 4 | `S:corner,shaft,ell/2:stone` | 0.728 | 328 | 1156 | 3 | 3 | 54% | 65% |
-| 5 | `S:notch,corner/1,notch:stone` | 0.722 | 375 | 1155 | 3 | 3 | 42% | 72% |
-| 6 | `S:notch,drum,ell/2:stone` | 0.721 | 352 | 1156 | 3 | 2 | 45% | 66% |
-| 7 | `S:notch,drum,ell/3:stone` | 0.721 | 352 | 1156 | 3 | 2 | 45% | 66% |
-| 8 | `S:corner,frame,ell/2:stone` | 0.720 | 328 | 1156 | 3 | 2 | 50% | 60% |
-| 9 | `S:tee,frame,ell/3:stone` | 0.719 | 316 | 1156 | 3 | 3 | 51% | 65% |
-| 10 | `S:corner,ell/1,notch/3:stone` | 0.715 | 251 | 1156 | 3 | 3 | 61% | 68% |
-| 11 | `S:corner,ell/3,notch:stone` | 0.715 | 251 | 1156 | 3 | 2 | 61% | 68% |
-| 12 | `S:notch,drum,ell-deep/2:stone` | 0.713 | 329 | 1156 | 3 | 2 | 45% | 69% |
-| 13 | `S:notch,drum,ell-deep/3:stone` | 0.713 | 329 | 1156 | 3 | 2 | 45% | 69% |
-| 14 | `S:corner,ell-deep/1,ell/1:stone` | 0.712 | 218 | 1156 | 3 | 3 | 66% | 67% |
-| 15 | `S:corner,ell-deep/3,ell/3:stone` | 0.712 | 218 | 1156 | 3 | 2 | 66% | 67% |
-| 16 | `S:corner,ell/1,ell-deep/1:stone` | 0.712 | 218 | 1156 | 3 | 2 | 66% | 67% |
-| 17 | `S:corner,twin,notch/3:stone` | 0.712 | 280 | 1156 | 3 | 2 | 53% | 63% |
-| 18 | `S:tee,frame,ell-deep/3:stone` | 0.711 | 289 | 1156 | 3 | 3 | 52% | 67% |
-| 19 | `S:ell-deep,drum,notch/1:stone` | 0.711 | 329 | 1156 | 3 | 2 | 44% | 69% |
-| 20 | `S:corner,ell/1,notch/2:stone` | 0.711 | 237 | 1156 | 3 | 3 | 61% | 68% |
-| 21 | `S:corner,ell/3,notch/1:stone` | 0.711 | 237 | 1156 | 3 | 2 | 61% | 68% |
-| 22 | `S:corner,notch/1,ell/3:stone` | 0.711 | 237 | 1156 | 3 | 2 | 61% | 68% |
-| 23 | `S:notch,corner/2,notch:stone` | 0.711 | 297 | 1155 | 3 | 3 | 50% | 72% |
-| 24 | `S:notch,corner/3,notch:stone` | 0.711 | 297 | 1155 | 3 | 2 | 50% | 72% |
-| 25 | `S:corner,notch,ell/3:stone` | 0.711 | 251 | 1156 | 3 | 3 | 59% | 68% |
-| 26 | `S:corner,notch/3,ell/1:stone` | 0.711 | 251 | 1156 | 3 | 2 | 59% | 68% |
-| 27 | `S:tee,frame,ell/1:stone` | 0.707 | 277 | 1156 | 3 | 3 | 51% | 65% |
-| 28 | `S:ell-deep,drum,ell-deep:stone` | 0.707 | 309 | 1155 | 3 | 3 | 45% | 68% |
-| 29 | `S:corner,shaft,ell/3:stone` | 0.706 | 258 | 1156 | 3 | 3 | 54% | 65% |
-| 30 | `S:corner,twin/1,notch/2:stone` | 0.705 | 259 | 1156 | 3 | 2 | 53% | 63% |
-| 31 | `S:ell,drum,ell:stone` | 0.705 | 318 | 1155 | 3 | 2 | 42% | 62% |
-| 32 | `S:notch,corner,notch/1:stone` | 0.704 | 294 | 1155 | 3 | 3 | 46% | 72% |
-| 33 | `S:notch,corner/2,notch/1:stone` | 0.704 | 294 | 1155 | 3 | 3 | 46% | 72% |
-| 34 | `S:notch,corner/2,notch/2:stone` | 0.704 | 294 | 1155 | 3 | 3 | 46% | 72% |
-| 35 | `S:shaft,frame,shaft:stone` | 0.703 | 975 | 369 | 1 | 2 | 90% | 79% |
-| 36 | `S:notch,twin/1,ell/3:stone` | 0.702 | 409 | 1156 | 2 | 3 | 81% | 80% |
-| 37 | `S:corner,notch/3,notch/3:stone` | 0.700 | 375 | 1156 | 3 | 3 | 28% | 72% |
-| 38 | `S:corner,frame,ell/1:stone` | 0.699 | 258 | 1156 | 3 | 2 | 50% | 60% |
-| 39 | `S:corner,frame,ell/3:stone` | 0.699 | 258 | 1156 | 3 | 3 | 50% | 60% |
-| 40 | `S:tee,frame,ell-deep:stone` | 0.698 | 247 | 1156 | 3 | 2 | 52% | 67% |
+| 1 | `S:notch,drum,notch:stone` | 0.758 | 2068 | 3135 | 3 | 2 | 44% | 70% |
+| 2 | `S:notch,drum,notch/1:stone` | 0.748 | 1924 | 3135 | 3 | 2 | 44% | 70% |
+| 3 | `S:wall-curve,ell,notch/1:stone` | 0.745 | 1310 | 3136 | 3 | 2 | 69% | 79% |
+| 4 | `S:stub,shaft,wall-curve/1:stone` | 0.745 | 1784 | 3136 | 3 | 3 | 48% | 53% |
+| 5 | `S:stub,frame,wall-curve:stone` | 0.740 | 1784 | 3136 | 3 | 2 | 45% | 48% |
+| 6 | `S:corner,shaft,wall-curve:stone` | 0.733 | 1418 | 3136 | 3 | 3 | 57% | 59% |
+| 7 | `S:wall-curve,wall-curve/2,ell:stone` | 0.732 | 1241 | 3136 | 3 | 3 | 65% | 69% |
+| 8 | `S:stub,frame,wall-curve/2:stone` | 0.731 | 1657 | 3136 | 3 | 2 | 45% | 48% |
+| 9 | `S:corner,notch,wall-curve:stone` | 0.731 | 1383 | 3136 | 3 | 3 | 57% | 62% |
+| 10 | `S:corner,notch/3,wall-curve:stone` | 0.731 | 1383 | 3136 | 3 | 2 | 57% | 62% |
+| 11 | `S:wall-tee,ell,notch/2:stone` | 0.730 | 1242 | 3136 | 3 | 3 | 63% | 74% |
+| 12 | `S:wall-tee,wall-curve/2,wall-curve:stone` | 0.729 | 1392 | 3136 | 3 | 3 | 56% | 58% |
+| 13 | `S:wall-tee,wall-curve/3,wall-curve/1:stone` | 0.729 | 1392 | 3136 | 3 | 2 | 56% | 58% |
+| 14 | `S:tee,frame,wall-curve:stone` | 0.729 | 1378 | 3136 | 3 | 2 | 56% | 59% |
+| 15 | `S:tee,frame,wall-curve/1:stone` | 0.729 | 1378 | 3136 | 3 | 2 | 56% | 59% |
+| 16 | `S:corner,frame,wall-curve:stone` | 0.728 | 1418 | 3136 | 3 | 3 | 54% | 54% |
+| 17 | `S:wall,wall-curve/3,notch/3:stone` | 0.728 | 1450 | 3142 | 3 | 3 | 52% | 63% |
+| 18 | `S:notch,drum,wall-curve/1:stone` | 0.727 | 1764 | 3136 | 3 | 3 | 38% | 60% |
+| 19 | `S:wall-tee,ell,ell-deep:stone` | 0.726 | 1102 | 3136 | 3 | 3 | 67% | 72% |
+| 20 | `S:corner,notch,ell/2:stone` | 0.726 | 1292 | 3136 | 3 | 3 | 59% | 68% |
+| 21 | `S:stub,wall-curve/1,notch:stone` | 0.726 | 1691 | 3136 | 3 | 3 | 40% | 56% |
+| 22 | `S:wall-tee,wall-curve/3,ell/1:stone` | 0.726 | 1206 | 3136 | 3 | 3 | 62% | 64% |
+| 23 | `S:wall-tee,wall-ell/2,notch/1:stone` | 0.726 | 1362 | 3136 | 3 | 3 | 55% | 65% |
+| 24 | `S:stub,twin,notch/3:stone` | 0.726 | 1498 | 3136 | 3 | 3 | 49% | 57% |
+| 25 | `S:wall-curve,wall-curve/2,ell/1:stone` | 0.724 | 1242 | 3136 | 3 | 3 | 59% | 69% |
+| 26 | `S:wall-curve,wall-curve/2,ell/3:stone` | 0.724 | 1242 | 3136 | 3 | 3 | 59% | 69% |
+| 27 | `S:ell,wall-tee,notch/1:stone` | 0.724 | 1274 | 3136 | 3 | 2 | 58% | 74% |
+| 28 | `S:stub,notch/1,wall-curve/2:stone` | 0.724 | 1498 | 3136 | 3 | 3 | 48% | 56% |
+| 29 | `S:stub,notch/2,wall-curve/2:stone` | 0.724 | 1498 | 3136 | 3 | 3 | 48% | 56% |
+| 30 | `S:stub,notch/3,wall-curve/3:stone` | 0.724 | 1498 | 3136 | 3 | 2 | 48% | 56% |
+| 31 | `S:stub,wall-curve/2,notch/1:stone` | 0.724 | 1498 | 3136 | 3 | 2 | 48% | 56% |
+| 32 | `S:stub,twin/1,notch/2:stone` | 0.724 | 1625 | 3136 | 3 | 3 | 42% | 57% |
+| 33 | `S:wall-tee,twin/1,ell/2:stone` | 0.723 | 1206 | 3136 | 3 | 2 | 61% | 65% |
+| 34 | `S:wall-ell,wall-tee/1,notch:stone` | 0.722 | 1362 | 3136 | 3 | 2 | 53% | 65% |
+| 35 | `S:corner,notch,wall-ell:stone` | 0.722 | 1305 | 3136 | 3 | 3 | 55% | 60% |
+| 36 | `S:corner,notch/3,wall-ell:stone` | 0.722 | 1305 | 3136 | 3 | 3 | 55% | 60% |
+| 37 | `S:wall-curve,wall-curve/2,ell-deep:stone` | 0.721 | 1165 | 3136 | 3 | 3 | 61% | 72% |
+| 38 | `S:corner,shaft,ell/2:stone` | 0.720 | 1299 | 3136 | 3 | 3 | 54% | 65% |
+| 39 | `S:tee,frame,wall-curve/2:stone` | 0.719 | 1252 | 3136 | 3 | 2 | 56% | 59% |
+| 40 | `S:wall-curve,wall-tee/2,ell/1:stone` | 0.719 | 1206 | 3136 | 3 | 2 | 58% | 64% |
 
 1 blocks tie at the top score of 0.758, out of
-3,667 distinct scores. High scores still cluster, because the things
+5,019 distinct scores. High scores still cluster, because the things
 that make a block viable are correlated — so the list above is not a shelf. A
 shelf needs blocks that differ.
 
@@ -292,30 +299,30 @@ order, refusing one whose combination of plans is already on the shelf.
 
 | recipe | score | reach | ways | anchors | mass |
 |---|---:|---:|---:|---:|---:|
-| `S:notch,drum,notch:stone` | 0.758 | 483 | 3 | 2 | 70% |
-| `S:corner,notch,ell/2:stone` | 0.733 | 322 | 3 | 3 | 68% |
-| `S:corner,shaft,ell/2:stone` | 0.728 | 328 | 3 | 3 | 65% |
-| `S:notch,corner/1,notch:stone` | 0.722 | 375 | 3 | 3 | 72% |
-| `S:notch,drum,ell/2:stone` | 0.721 | 352 | 3 | 2 | 66% |
-| `S:corner,frame,ell/2:stone` | 0.720 | 328 | 3 | 2 | 60% |
-| `S:tee,frame,ell/3:stone` | 0.719 | 316 | 3 | 3 | 65% |
-| `S:corner,ell/1,notch/3:stone` | 0.715 | 251 | 3 | 3 | 68% |
-| `S:notch,drum,ell-deep/2:stone` | 0.713 | 329 | 3 | 2 | 69% |
-| `S:corner,ell-deep/1,ell/1:stone` | 0.712 | 218 | 3 | 3 | 67% |
-| `S:corner,ell/1,ell-deep/1:stone` | 0.712 | 218 | 3 | 2 | 67% |
-| `S:corner,twin,notch/3:stone` | 0.712 | 280 | 3 | 2 | 63% |
-| `S:tee,frame,ell-deep/3:stone` | 0.711 | 289 | 3 | 3 | 67% |
-| `S:ell-deep,drum,notch/1:stone` | 0.711 | 329 | 3 | 2 | 69% |
-| `S:ell-deep,drum,ell-deep:stone` | 0.707 | 309 | 3 | 3 | 68% |
-| `S:ell,drum,ell:stone` | 0.705 | 318 | 3 | 2 | 62% |
-| `S:shaft,frame,shaft:stone` | 0.703 | 975 | 1 | 2 | 79% |
-| `S:notch,twin/1,ell/3:stone` | 0.702 | 409 | 2 | 3 | 80% |
-| `S:corner,notch/3,notch/3:stone` | 0.700 | 375 | 3 | 3 | 72% |
-| `S:full,full,full:stone` | 0.565 | 975 | 0 | 1 | 100% |
-| `A:x+:tee/2:stone` | 0.459 | 97 | 2 | 2 | 37% |
-| `A:x+:shaft:stone` | 0.450 | 15 | 2 | 3 | 58% |
-| `A:x+:drum:stone` | 0.450 | 190 | 2 | 3 | 27% |
-| `A:x+:notch/2:stone` | 0.432 | 11 | 2 | 2 | 64% |
+| `S:notch,drum,notch:stone` | 0.758 | 2068 | 3 | 2 | 70% |
+| `S:wall-curve,ell,notch/1:stone` | 0.745 | 1310 | 3 | 2 | 79% |
+| `S:stub,shaft,wall-curve/1:stone` | 0.745 | 1784 | 3 | 3 | 53% |
+| `S:stub,frame,wall-curve:stone` | 0.740 | 1784 | 3 | 2 | 48% |
+| `S:corner,shaft,wall-curve:stone` | 0.733 | 1418 | 3 | 3 | 59% |
+| `S:wall-curve,wall-curve/2,ell:stone` | 0.732 | 1241 | 3 | 3 | 69% |
+| `S:corner,notch,wall-curve:stone` | 0.731 | 1383 | 3 | 3 | 62% |
+| `S:wall-tee,ell,notch/2:stone` | 0.730 | 1242 | 3 | 3 | 74% |
+| `S:wall-tee,wall-curve/2,wall-curve:stone` | 0.729 | 1392 | 3 | 3 | 58% |
+| `S:tee,frame,wall-curve:stone` | 0.729 | 1378 | 3 | 2 | 59% |
+| `S:corner,frame,wall-curve:stone` | 0.728 | 1418 | 3 | 3 | 54% |
+| `S:wall,wall-curve/3,notch/3:stone` | 0.728 | 1450 | 3 | 3 | 63% |
+| `S:notch,drum,wall-curve/1:stone` | 0.727 | 1764 | 3 | 3 | 60% |
+| `S:wall-tee,ell,ell-deep:stone` | 0.726 | 1102 | 3 | 3 | 72% |
+| `S:corner,notch,ell/2:stone` | 0.726 | 1292 | 3 | 3 | 68% |
+| `S:stub,wall-curve/1,notch:stone` | 0.726 | 1691 | 3 | 3 | 56% |
+| `S:wall-tee,wall-curve/3,ell/1:stone` | 0.726 | 1206 | 3 | 3 | 64% |
+| `S:wall-tee,wall-ell/2,notch/1:stone` | 0.726 | 1362 | 3 | 3 | 65% |
+| `S:stub,twin,notch/3:stone` | 0.726 | 1498 | 3 | 3 | 57% |
+| `A:xl:corner/3:stone` | 0.562 | 387 | 2 | 3 | 23% |
+| `S:full,full,full:stone` | 0.559 | 4171 | 0 | 1 | 100% |
+| `A:xl:stub/1:stone` | 0.531 | 613 | 2 | 3 | 12% |
+| `A:xl:wall/2:stone` | 0.504 | 235 | 2 | 3 | 25% |
+| `A:xl:notch/3:stone` | 0.488 | 19 | 2 | 3 | 58% |
 
 ```bash
 node tools/census.mjs --shelf 16 | tr '\n' ',' | xargs -I{} node tools/blockshot.mjs --recipes {}
@@ -327,16 +334,16 @@ What the bottom of the space looks like, which is worth seeing once.
 
 | recipe | score | reach | stand | ways | anchors | mass |
 |---|---:|---:|---:|---:|---:|---:|
-| `S:ell-deep,shaft,bar-wide/1:stone` | 0.144 | 200 | 81% | 0 | 0 | 76% |
-| `S:rounded,bore,twin/1:stone` | 0.130 | 25 | 49% | 0 | 0 | 62% |
-| `S:full,shaft,rounded:stone` | 0.129 | 77 | 91% | 0 | 1 | 93% |
-| `S:rounded,shaft,full:stone` | 0.129 | 77 | 89% | 0 | 1 | 93% |
-| `S:notch,frame,rounded:stone` | 0.125 | 66 | 77% | 0 | 1 | 86% |
-| `S:rounded,bore,corner/1:stone` | 0.124 | 14 | 47% | 0 | 0 | 50% |
-| `S:rounded,quarters,drum:stone` | 0.122 | 21 | 44% | 0 | 0 | 50% |
-| `S:ell-deep,shaft,rounded:stone` | 0.118 | 44 | 85% | 0 | 1 | 89% |
-| `S:rounded,shaft,bar-wide/1:stone` | 0.114 | 31 | 85% | 0 | 1 | 78% |
-| `S:rounded,bore,drum:stone` | 0.114 | 21 | 39% | 0 | 0 | 49% |
-| `S:notch,shaft,rounded:stone` | 0.065 | 66 | 87% | 0 | 0 | 91% |
-| `S:rounded,shaft,drum:stone` | 0.061 | 52 | 81% | 0 | 0 | 68% |
+| `S:wall-curve,tee/3,corners-two/1:stone` | 0.122 | 277 | 17% | 0 | 0 | 43% |
+| `S:wall-ell,tee,corners-two/1:stone` | 0.119 | 226 | 17% | 0 | 0 | 41% |
+| `S:rounded,bore,corner/1:stone` | 0.117 | 42 | 47% | 0 | 0 | 50% |
+| `S:rounded,quarters,drum:stone` | 0.115 | 67 | 44% | 0 | 0 | 50% |
+| `S:full,shaft,rounded:stone` | 0.115 | 213 | 91% | 0 | 1 | 93% |
+| `S:rounded,shaft,full:stone` | 0.115 | 213 | 89% | 0 | 1 | 93% |
+| `S:notch,frame,rounded:stone` | 0.113 | 187 | 77% | 0 | 1 | 86% |
+| `S:ell-deep,shaft,rounded:stone` | 0.108 | 115 | 85% | 0 | 1 | 89% |
+| `S:rounded,bore,drum:stone` | 0.106 | 67 | 39% | 0 | 0 | 49% |
+| `S:rounded,shaft,bar-wide/1:stone` | 0.104 | 74 | 85% | 0 | 1 | 78% |
+| `S:notch,shaft,rounded:stone` | 0.053 | 187 | 87% | 0 | 0 | 91% |
+| `S:rounded,shaft,drum:stone` | 0.049 | 132 | 81% | 0 | 0 | 68% |
 
