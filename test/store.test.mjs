@@ -699,6 +699,33 @@ test("a piranesi/3 save's torches land on the same brackets — BACKLOG 0w", () 
   assert.deepEqual(lit(survey(again, cat)), lit(after), 'the same brackets, a second time round');
 });
 
+test("a choice on a block this build cannot make is LEFT ALONE — BACKLOG 0w", () => {
+  // The upgrade drops a key naming a site the block no longer offers, which is
+  // right. It must not do the same to a key whose block is missing because THIS
+  // BUILD CANNOT DECODE ITS RECIPE — that is a lossy load, the block may come
+  // back the day the grammar does, and it should come back with its torches on.
+  // Same rule as the shelf's: report, keep, never delete.
+  const { cat, id, def } = anchored();
+  const w = World.fromJSON(cat, {
+    format: 'piranesi/3', palette: [id, OLD_LADDER], cells: [[0, 0, 0, 0], [9, 0, 0, 1]],
+    anchors: [
+      ['structure|0,0,0#0', 'torch'],
+      ['structure|9,0,0#0', 'ring'],       // …on the block that will not build
+    ],
+  }, (r) => blockFromRecipe(r));
+  assert.deepEqual(w.missing, [OLD_LADDER], 'the lossy load is what sets this up');
+
+  survey(w, cat);
+  assert.equal(w.anchors.get('structure|9,0,0#0'), 'ring', 'kept, exactly as written');
+  assert.equal(w.anchors.get(siteId({ layer: 'structure', x: 0, y: 0, z: 0 }, def.anchors[0])), 'torch');
+  assert.match(w.anchorNote, /cannot build and were left alone/);
+
+  // …and the file it would write says so: a stale index key means it is still a
+  // /3 file, and stamping /4 over it would tell the next reader to take those
+  // keys for geometry.
+  assert.equal(w.toJSON().format, 'piranesi/3');
+});
+
 test('a site the block no longer has is dropped, and said — BACKLOG 0w', () => {
   const { cat, id } = anchored();
   const w = World.fromJSON(cat, {

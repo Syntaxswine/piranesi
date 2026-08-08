@@ -614,15 +614,21 @@ function save() {
   // recipes for everything that did not. One click after opening a building
   // drawn before the slice-plane ladder changed and the evidence is gone,
   // permanently, and the file looks healthy ever after.
+  // BOTH REFUSALS STILL DRAIN. `buildings()` and the readers queue complaints of
+  // their own — "this one would not read", "out of storage" — and `save` is the
+  // only thing that empties the queue. Returning without draining meant that
+  // while a conflict was open, which can be the whole afternoon, no other
+  // problem in the save system could reach the screen at all.
   if (state.lossy) {
     note(`"${state.open}" is missing ${state.lossy} block(s) this version cannot build — `
       + 'not saving over it. Use "save as" to keep this state under a new name.');
+    for (const p of store.drain()) note(p);
     return;
   }
   // ANOTHER TAB OWNS THIS BUILDING, and until that is settled the autosave says
   // nothing more. It has already been reported once; repeating it on every click
   // would push the way out of the message queue.
-  if (state.conflict) return;
+  if (state.conflict) { for (const p of store.drain()) note(p); return; }
 
   const view = currentView();
   const got = store.saveBuilding(state.open, state.world.toJSON(), view);
@@ -781,8 +787,16 @@ function buildings() {
     x.title = 'delete this building';
     x.onclick = () => {
       if (!confirm(`Delete "${b.name}"? This cannot be undone.`)) return;
-      store.removeBuilding(b.name);
-      if (state.open === b.name) state.open = uniqueName('untitled');
+      if (!store.removeBuilding(b.name)) { for (const p of store.drain()) note(p); return; }
+      if (state.open === b.name) {
+        state.open = uniqueName('untitled');
+        // AND THE CONFLICT GOES WITH IT. There is nothing left to be in conflict
+        // with, and leaving the flag set would block the autosave on a building
+        // that no longer exists — so the world still on screen could never be
+        // written anywhere, which is the deletion taking work it was not asked
+        // for. `lossy` is NOT cleared: that world really is still short.
+        state.conflict = false;
+      }
       buildings();
       note(`deleted "${b.name}"`);
     };
@@ -993,8 +1007,13 @@ addEventListener('storage', (e) => {
     state.conflict = true;
     note(`"${state.open}" has just been written by another tab. Nothing here will be `
       + 'saved until you choose: "save as" keeps this one, "revert" loads theirs.');
+    buildings();
     return;
   }
+  // Any OTHER building changing is not our business except that the list is now
+  // wrong — a row saying "2m ago" for something another tab saved a second ago,
+  // or a row for a building that has been deleted.
+  if (e.key && (e.key.startsWith(BPREFIX) || e.key === 'piranesi/index')) { buildings(); return; }
   if (e.key !== 'piranesi/shelf') return;
   const before = catalog.size;
   drawnShelf(catalog);

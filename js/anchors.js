@@ -192,25 +192,34 @@ export function reindex(world, catalog, stamp = samplerStamp()) {
       + 'changed since — the choices are kept as they are rather than moved to the wrong walls';
     return 0;
   }
-  let moved = 0, lost = 0;
+  let moved = 0, lost = 0, kept = 0;
   for (const [id, kind] of [...world.anchors.entries()]) {
     if (!isIndexKey(id)) continue;
     const hash = id.lastIndexOf('#');
     const stem = id.slice(0, hash);
     const i = Number(id.slice(hash + 1));
     const b = world.blocks.get(stem);
-    const def = b && catalog.get(b.id);
+    // NO BLOCK THERE AT ALL means this build could not make its recipe — the
+    // load was lossy — and the choice is LEFT EXACTLY WHERE IT IS. Dropping it
+    // would be this module deciding that a block a later version can build
+    // again should come back with its torches off, and it is the same rule the
+    // shelf follows for a recipe it cannot decode: report, keep, never delete.
+    // (`save` refuses to write a lossy world at all, so the only way this
+    // reaches a file is a deliberate `save as`.)
+    if (!b) { kept++; continue; }
+    const def = catalog.get(b.id);
     const a = def && def.anchors && def.anchors[i];
     world.anchors.delete(id);
-    // A site the block no longer offers is dropped, not guessed at — the same
+    // A site the block NO LONGER OFFERS is dropped, not guessed at — the same
     // rule `forgetAnchorsAt` applies when the block itself goes.
     if (!a) { lost++; continue; }
     world.anchors.set(siteId(b, a), kind);
     moved++;
   }
-  if (moved || lost) {
+  if (moved || lost || kept) {
     world.anchorNote = `${moved} anchor choice(s) moved to the new naming`
-      + (lost ? `; ${lost} named a site this build's blocks no longer have` : '');
+      + (lost ? `; ${lost} named a site this build's blocks no longer have` : '')
+      + (kept ? `; ${kept} belong to blocks this version cannot build and were left alone` : '');
   }
   return moved;
 }
