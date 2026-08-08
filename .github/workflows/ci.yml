@@ -69,5 +69,13 @@ jobs:
       # is committed so this line is a real test and not a fixture built by the
       # thing it is testing. plateshot exits 1 rather than write a blank plate.
       - run: node tools/plateshot.mjs --load docs/sample-save.json --size 320x240 --out /tmp/save.png
+      # AND A SAVE WITH FITTINGS IN IT. `docs/sample-anchors.json` is a committed
+      # `piranesi/3` file with six INDEX-KEYED anchor choices — the format this
+      # build upgrades on load, gated on a pinned stamp of the anchor sampler
+      # (see js/stack.js SAMPLER). It is also the only thing exercising the
+      # fittings path in the instrument: plateshot drew the masonry and silently
+      # left every torch off, so the one tool that photographs a save was
+      # photographing a different building from the one in the file.
+      - run: node tools/plateshot.mjs --load docs/sample-anchors.json --size 320x240 --out /tmp/anchors.png
       # layershot is the one that would notice the layer feedback going flat.
       - run: node tools/layershot.mjs --layers 3 --layer 1 --size 320x220 --out /tmp/layers.png

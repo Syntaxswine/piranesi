@@ -18,8 +18,9 @@ snaking through a labyrinth.
 > the old game. Blocks are still plain masses wanting relief and ornament.
 >
 > **Start at [`docs/HANDOFF-2026-08-08.md`](docs/HANDOFF-2026-08-08.md)** — one
-> page, and it names the three known ways the save system can still lose work.
-> Read it before touching anything.
+> page. The save system's three known ways of losing work are closed; what it
+> names now is the **springer**, which turns out to be standing in front of two
+> other things. Read it before touching anything.
 >
 > Then [`HANDOFF-2026-08-07.md`](docs/HANDOFF-2026-08-07.md), the long keystone:
 > the grammar walked and measured, the hundred-block kit, the openings, the
