@@ -403,9 +403,21 @@ export class Store {
     return { ...rec, name: entry.name, slug: entry.slug };
   }
 
-  /** What a list needs: enough to tell two similar buildings apart, and no
-   *  world. See 0x — before this there was no timestamp and no content
-   *  identity, so a library of near-copies could not be pruned safely. */
+  /**
+   * What a list needs: enough to tell two similar buildings apart, and no
+   * world. See 0x — before this there was no timestamp and no content identity,
+   * so a library of near-copies could not be pruned safely.
+   *
+   * AND IT IS NOT MEMOISED, deliberately. It reads and parses every record on
+   * every call and `game.js` calls it on every placement, which sounds
+   * expensive enough to want a cache — so it was measured instead of guessed
+   * at: **5.4 ms** for twenty buildings of a thousand blocks each, which is
+   * twenty times a realistic library, against the 30–100 ms the same click
+   * spends biting the plate. A memo would have to be keyed on the record's own
+   * text to stay honest, which means holding a second copy of the whole library
+   * in memory to save a twentieth of a frame. Do not add one without a number
+   * that says it hurts.
+   */
   summaries() {
     return this.index().map((e) => {
       const k = bkey(e.slug);
