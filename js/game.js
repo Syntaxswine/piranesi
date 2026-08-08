@@ -22,7 +22,7 @@
 //    pixels and no hatching.
 
 import { World } from './world.js';
-import { buildCatalog, blockFromRecipe } from './stack.js';
+import { buildCatalog, blockFromRecipe, add } from './stack.js';
 import { SUB } from './cube.js';
 import { survey, fittingAt, KINDS } from './anchors.js';
 import { Camera, projectWith } from './math.js';
@@ -42,7 +42,30 @@ const SLOT = new URLSearchParams(location.search).get('slot') || '';
 const SAVE_KEY = 'piranesi/save' + (SLOT ? ':' + SLOT : '');
 
 const catalog = buildCatalog(24, 1);
+drawnShelf(catalog);
 const ids = [...catalog.keys()];
+
+/**
+ * THE BLOCKS THE PLAYER DREW, dealt beside the generated hand.
+ *
+ * `draw.html` writes `D:` recipes to this key; the game reads them at boot and
+ * puts them on the shelf.  It is a one-way channel on purpose — the board owns
+ * the list, the game only reads it — so a bug in either cannot corrupt the
+ * other's state, and a building that uses a drawn block is safe regardless: its
+ * save carries the recipe, and `World.fromJSON` registers anything the shelf has
+ * never heard of.  Take a block off the shelf and every building made with it
+ * still loads.
+ *
+ * Reported and never substituted, same as everywhere else: a drawing this
+ * version cannot build says so in the console rather than leaving a silent gap.
+ */
+function drawnShelf(cat) {
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem('piranesi/drawn') || '[]'); } catch { return; }
+  if (!Array.isArray(list)) return;
+  const bad = list.filter((r) => typeof r !== 'string' || (!add(cat, r) && !cat.has(r)));
+  if (bad.length) console.warn(`piranesi: ${bad.length} drawn block(s) could not be built:`, bad);
+}
 
 const state = {
   mode: BUILD,

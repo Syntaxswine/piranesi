@@ -187,6 +187,41 @@
 > shadows, staffage, the halo, the two states, ornament, irregularity, the
 > renderer refinements. Those were about the medium, and the medium did not
 > change.
+>
+> ### ✅ Updated 2026-08-07 (later still) — THE DRAWING BOARD, and `D:`
+>
+> `draw.html` / `js/drawn.js` / `js/draw.js`. Three storeys painted cell by cell
+> on the slice grid, a bucket, a rectangle, and **the ramp** — one storey of
+> rise over at least one storey of run, which the grammar checks. A third recipe
+> family, `D:`, in half-yards base 36; a partition into disjoint maximal
+> rectangles, so the overlap-reads-as-void trap is unreachable from the board.
+> Blocks go to a shelf in `localStorage` and the game deals them.
+>
+> `extrudePlan` moved to `plan.js` and `DECKS` to `cube.js` so the two composers
+> raise stone by the same act. Every archive tool byte-identical afterwards.
+>
+> **0k (NEW). The board cannot draw a curve.** Seven plans of twenty-four are
+> unreachable on it — `rounded`, `drum`, `quarters`, `shaft`, `bore`, and
+> (less obviously, so it is worth knowing) `wall-tee` and `wall-curve`, whose
+> far corners are quarter-columns struck at R. The legal centres are enumerable
+> — the four block corners, the four arc centres and the axis — so a *round this
+> corner at R* modifier on a painted cell is a small, bounded addition. It is
+> the largest gap in the board.
+>
+> **0l (NEW). The board cannot draw an arch.** `A:` springs at 4.5 and crowns on
+> the boundary, which is a vertical freedom the three-storey extrusion does not
+> have. A drawn block and a vault are still separate acts; the springer (0f)
+> would be the piece that lets them meet.
+>
+> **0m (NEW). A ramp has nothing to say about what holds it up.** The toe is a
+> knife edge and the layer below is the designer's business. That is right for a
+> drawing board and wrong for a building — a *soffit* option (fill the wedge
+> down to the deck) is one flag on the recipe and one more face on the wedge.
+>
+> **0n (NEW). Retire `tools/snap.mjs`** if nothing has called it by the next
+> pass. `serve.mjs --shots` does the same job from the server the page is
+> already on: no second process, no CORS, `fetch('/__shot', …)`. Grep the tree
+> before you build — this one was found *after* the duplicate was written.
 
 Ranked by how much Carceri each buys. Sources are five research briefs
 (etching craft, a census of the sixteen plates, the spatial scholarship, the NPR

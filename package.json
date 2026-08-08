@@ -8,6 +8,7 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "serve": "node tools/serve.mjs --port 8749",
+    "serve:shots": "node tools/serve.mjs --port 8749 --shots",
     "test": "node --test \"test/*.test.mjs\"",
     "shot": "node tools/plateshot.mjs",
     "check": "npm run test && node tools/plateshot.mjs --scene probe --out docs/shots/probe.png --stats"

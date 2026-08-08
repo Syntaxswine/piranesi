@@ -27,8 +27,9 @@
 // without either knowing about the other.
 
 import { Mesh, sweep } from './mesh.js';
-import { SUB, R_WHOLE, PRIMARY } from './cube.js';
-import { PLANS, PLAN_IDS, turnPlan } from './plan.js';
+import { SUB, R_WHOLE, DECKS, PRIMARY } from './cube.js';
+import { PLANS, PLAN_IDS, turnPlan, extrudePlan } from './plan.js';
+import { drawnMesh } from './drawn.js';
 import { stackRecipe, archRecipe, decode, seedOf, label, LAYERS } from './recipe.js';
 import { vault, halfVault, tagFlat } from './forms.js';
 import { insideMesh } from './solidity.js';
@@ -37,10 +38,10 @@ import { arc } from './mesh.js';
 const S = SUB;
 const C = S / 2;
 export { LAYERS };
-/** The horizontal cuts a stacked block uses: his "basic 1/3rd slices".  Finer
- *  ones are legal — 2, 2.5, 6.5 and 7 are slice planes too — but he stuck to
- *  thirds and thirds are what make a stack read as storeys. */
-export const DECKS = [0, 3, 6, 9];
+/** The horizontal cuts a stacked block uses: his "basic 1/3rd slices".  Defined
+ *  in cube.js, where the drawing board and the ramp can reach it too — it is a
+ *  fact about the cube, not about this composer. */
+export { DECKS };
 
 /* ------------------------------------------------------------------ random */
 
@@ -62,31 +63,13 @@ const chance = (r, p) => r() < p;
 
 /* ---------------------------------------------------------------- building */
 
-/**
- * Extrude one plan between two heights.
- *
- * The caps take `-z`/`+z` only at the block's own floor and ceiling.  An
- * interior deck is NOT a boundary — tagging it as one would let it cancel
- * against the block above, and a floor you can fall through is worse than a
- * floor drawn twice.
- */
-function extrude(m, polys, z0, z1, mat, tag) {
-  for (const poly of polys) {
-    sweep(m, poly, 'z', z0, z1, {
-      mat, tag,
-      sideA: z0 === 0 ? '-z' : null,
-      sideB: z1 === S ? '+z' : null,
-      hatch: 'v',
-    });
-  }
-}
-
-/** A stacked block: one plan per third. */
+/** A stacked block: one plan per third.  `extrudePlan` lives in plan.js so that
+ *  the drawing board raises stone by exactly the same act — see drawn.js. */
 function stackMesh(layers, mat) {
   const m = new Mesh();
   layers.forEach((L, i) => {
     const polys = turnPlan(PLANS[L.id].make(), L.q);
-    extrude(m, polys, DECKS[i], DECKS[i + 1], mat, `layer${i}:${L.id}`);
+    extrudePlan(m, polys, DECKS[i], DECKS[i + 1], mat, `layer${i}:${L.id}`);
   });
   tagFlat(m);
   return m;
@@ -95,7 +78,7 @@ function stackMesh(layers, mat) {
 /** An arch block: piers to the springing, the whole-block vault above. */
 function archMesh(pier, axis, hand, mat) {
   const m = new Mesh();
-  extrude(m, turnPlan(PLANS[pier.id].make(), pier.q), 0, C, mat, `pier:${pier.id}`);
+  extrudePlan(m, turnPlan(PLANS[pier.id].make(), pier.q), 0, C, mat, `pier:${pier.id}`);
   // The spandrels, lifted into place.  vault() builds them in its own block, so
   // merge rather than re-derive — one arc, one definition, no chance of the two
   // drifting apart.
@@ -234,9 +217,9 @@ export function rollRecipe(seed) {
 export function blockFromRecipe(recipe) {
   const d = decode(recipe);
   if (!d.ok) return null;
-  const mesh = d.family === 'arch'
-    ? archMesh(d.pier, d.axis, d.hand, d.mat)
-    : stackMesh(d.layers, d.mat);
+  const mesh = d.family === 'arch' ? archMesh(d.pier, d.axis, d.hand, d.mat)
+    : d.family === 'drawn' ? drawnMesh(d)
+      : stackMesh(d.layers, d.mat);
   mesh.finish();
   // The seed is a hash of the RECIPE, so whatever the recipe does not spell out
   // — which faces offer an anchor — is still fixed forever by the recipe alone.

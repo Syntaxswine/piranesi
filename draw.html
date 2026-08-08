@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Piranesi — the drawing board</title>
+<style>
+  /* Same drawing board as the game: small, monospace, low saturation, warm and
+     cool neutrals only.  The one difference is that here the DRAWING is the
+     spectacle and the model is the small window in the corner checking it. */
+  :root {
+    --ground: #ecebe0;
+    --desk:   #2b2a26;
+    --panel:  #232220;
+    --ink:    #38322a;
+    --rule:   #8a877c;
+    --hot:    #96502e;
+    --cool:   #5b6570;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: var(--desk); color: var(--ground);
+    font: 11px/1.45 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  #app { display: flex; height: 100%; }
+
+  #stage {
+    flex: 1; position: relative; display: flex; align-items: center; justify-content: center;
+    padding: 12px; min-width: 0; min-height: 0;
+  }
+  #board {
+    background: var(--ground);
+    box-shadow: 0 2px 5px rgba(0,0,0,.5), 0 16px 40px rgba(0,0,0,.45);
+    cursor: crosshair; touch-action: none; display: block;
+  }
+
+  /* THE MINI SCREEN.  "a mini screen in the upper right showing a preview what
+     the model looks like."  It sits over the board rather than beside it so the
+     board keeps the whole width it can get — and it is draggable to turn. */
+  #glass {
+    position: absolute; top: 18px; right: 18px; width: 268px;
+    border: 1px solid #131211; background: var(--panel);
+    box-shadow: 0 3px 10px rgba(0,0,0,.5);
+  }
+  #glass .cap {
+    display: flex; justify-content: space-between; gap: 6px;
+    padding: 4px 7px; color: var(--rule); font-size: 9px;
+    letter-spacing: .14em; text-transform: uppercase; border-bottom: 1px solid #131211;
+  }
+  #preview { display: block; width: 100%; cursor: grab; touch-action: none; }
+  #glass.turning #preview { cursor: grabbing; }
+
+  #side {
+    width: 244px; flex: 0 0 244px; display: flex; flex-direction: column;
+    border-left: 1px solid #131211; background: var(--panel);
+  }
+  header { padding: 11px 12px 9px; border-bottom: 1px solid #131211; }
+  header h1 { margin: 0 0 3px; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; font-weight: 600; }
+  header p { margin: 0; color: var(--rule); font-size: 10px; }
+  header a { color: var(--rule); }
+
+  /* Which layer you are on is the single most important number on the panel —
+     in a layer builder, not knowing it is the whole of being lost. */
+  #bar {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 7px 12px; border-bottom: 1px solid #131211; background: #1c1b19;
+  }
+  #layer { font-size: 13px; letter-spacing: .06em; }
+  #height { color: var(--hot); margin-left: auto; }
+
+  #panel { flex: 1; overflow-y: auto; padding: 8px; }
+  .lbl {
+    color: var(--rule); text-transform: uppercase; letter-spacing: .16em;
+    font-size: 9px; margin: 12px 0 5px 2px;
+  }
+  .lbl:first-child { margin-top: 0; }
+
+  .tools { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .tool {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 5px;
+    padding: 5px 7px; text-align: left; font: inherit; cursor: pointer;
+    background: #2e2c28; color: var(--ground);
+    border: 1px solid #3d3a34; border-radius: 2px;
+  }
+  .tool:hover { background: #383530; }
+  .tool.on { background: var(--ground); color: var(--ink); border-color: var(--ground); }
+  .tool .k { color: var(--rule); font-size: 9px; }
+  .tool.on .k { color: #6e6a5c; }
+
+  /* The three storeys, as three little plans.  A layer builder wants the whole
+     stack visible at once — flipping through to remember what is underneath is
+     how you draw a floor that lands on nothing. */
+  .storeys { display: flex; flex-direction: column-reverse; gap: 4px; }
+  .storey {
+    display: flex; align-items: center; gap: 8px; padding: 4px 6px;
+    background: #2e2c28; border: 1px solid #3d3a34; border-radius: 2px;
+    cursor: pointer; color: var(--ground); font: inherit; text-align: left;
+  }
+  .storey:hover { background: #383530; }
+  .storey.on { border-color: var(--hot); background: #35302b; }
+  .storey canvas { display: block; background: var(--ground); border-radius: 1px; }
+  .storey .n { flex: 1; }
+  .storey .c { color: var(--rule); font-size: 9px; }
+
+  #shelf .row2 { display: flex; gap: 4px; align-items: stretch; margin-bottom: 3px; }
+  #shelf .pick {
+    flex: 1; padding: 3px 6px; text-align: left; font: inherit; cursor: pointer;
+    background: #2e2c28; color: var(--ground); border: 1px solid #3d3a34;
+    border-radius: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #shelf .pick:hover { background: #383530; }
+  #shelf .drop {
+    width: 22px; padding: 0; font: inherit; cursor: pointer; color: var(--rule);
+    background: #2e2c28; border: 1px solid #3d3a34; border-radius: 2px;
+  }
+  #shelf .drop:hover { color: var(--hot); }
+  #shelf .none { color: var(--rule); font-size: 9.5px; padding: 2px; }
+
+  footer { border-top: 1px solid #131211; padding: 8px 12px 11px; }
+  .keys { color: var(--rule); font-size: 9.5px; margin-bottom: 8px; }
+  .keys b { color: var(--ground); font-weight: 400; }
+  #recipe {
+    width: 100%; margin-bottom: 7px; padding: 4px 6px; font: inherit;
+    background: #1c1b19; color: var(--rule); border: 1px solid #3d3a34;
+    border-radius: 2px; resize: none; height: 44px; overflow-x: auto; white-space: pre;
+  }
+  .row { display: flex; gap: 6px; margin-bottom: 7px; }
+  button.act {
+    flex: 1; padding: 4px 6px; font: inherit;
+    background: #2e2c28; color: var(--ground);
+    border: 1px solid #3d3a34; border-radius: 2px; cursor: pointer;
+  }
+  button.act:hover { background: #383530; }
+  #hud { color: var(--rule); font-size: 9.5px; line-height: 1.5; min-height: 2.8em; word-break: break-word; }
+  #hud.warn { color: #c07a52; }
+  kbd {
+    background: #2e2c28; border: 1px solid #3d3a34; border-bottom-width: 2px;
+    border-radius: 2px; padding: 0 3px; font: inherit; color: var(--ground);
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <canvas id="board"></canvas>
+    <div id="glass">
+      <div class="cap"><span>the model</span><span id="glasslayer">layer 0</span></div>
+      <canvas id="preview" width="268" height="222"></canvas>
+    </div>
+  </div>
+
+  <aside id="side">
+    <header>
+      <h1>The drawing board</h1>
+      <p>One block, three storeys, on his own slice lines. &nbsp;<a href="index.html">to the game &rsaquo;</a></p>
+    </header>
+
+    <div id="bar">
+      <span id="layer">layer 0</span>
+      <span id="height">0 – 3 yd</span>
+    </div>
+
+    <div id="panel">
+      <div class="lbl">tool</div>
+      <div class="tools" id="tools"></div>
+
+      <div class="lbl">storeys</div>
+      <div class="storeys" id="storeys"></div>
+
+      <div class="lbl">the shelf — blocks the game will deal you</div>
+      <div id="shelf"></div>
+    </div>
+
+    <footer>
+      <textarea id="recipe" spellcheck="false" autocomplete="off"></textarea>
+      <div class="row">
+        <button class="act" id="tostack">to the shelf</button>
+        <button class="act" id="mat">stone</button>
+      </div>
+      <div class="row">
+        <button class="act" id="undo">undo</button>
+        <button class="act" id="clearlayer">clear layer</button>
+        <button class="act" id="clearall">clear all</button>
+      </div>
+      <div class="keys">
+        <b>scroll</b> or <kbd>PgUp</kbd><kbd>PgDn</kbd> change layer ·
+        <kbd>1</kbd>–<kbd>3</kbd> jump to one<br>
+        <kbd>B</kbd> bucket · <kbd>P</kbd> paint · <kbd>K</kbd> block · <kbd>M</kbd> ramp ·
+        <kbd>Z</kbd> undo<br>
+        drag to draw · <b>right-drag</b> to take back · drag the model to turn it
+      </div>
+      <div id="hud"></div>
+    </footer>
+  </aside>
+</div>
+<script type="module" src="js/draw.js"></script>
+</body>
+</html>

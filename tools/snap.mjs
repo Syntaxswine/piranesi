@@ -1,5 +1,12 @@
 // snap.mjs — receive a rasterised PNG from the running page and write it to disk.
 //
+// SUPERSEDED FOR THE ORDINARY CASE by `serve.mjs --shots`, which does the same
+// job from the server the page is already loaded from: no second process, no
+// CORS, and `fetch('/__shot', …)` instead of a cross-origin POST to another
+// port. Keep this one for the case that route cannot serve — a page on some
+// other origin, or a capture wanted while the static server is not running.
+// Nothing in the repo calls it; if that is still true next time round, retire it.
+//
 // The Browser pane does not always composite frames, so screenshots time out.
 // This lets the page render its own SVG to a canvas and POST the bytes here,
 // which is both more reliable and higher-fidelity than a viewport capture.

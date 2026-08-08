@@ -38,7 +38,7 @@
 // ReferenceError instead of naming the illegal vertex, at the one moment it
 // existed to be useful.
 import { SUB, R, R_WHOLE, PLANES, FOOT } from './cube.js';
-import { arc } from './mesh.js';
+import { arc, sweep } from './mesh.js';
 
 const S = SUB;                       // 9 sub-blocks
 const C = S / 2;                     // 4.5 — the axis, and R_WHOLE
@@ -48,10 +48,38 @@ const STEPS = 10;
  *  ends.  In sub-blocks, because that is the unit he specified them in. */
 export const CUTS = [2, 2.5, 3, 4.5, 6, 6.5, 7];
 
+/* ------------------------------------------------------- plan into stone -- */
+
+/**
+ * EXTRUDE ONE PLAN BETWEEN TWO HEIGHTS.  This is the single act that turns a
+ * plan into masonry, and it lives here — with the thing it acts on — rather
+ * than inside the composer, because there are now two composers: `stack.js`
+ * raises a NAMED plan, `drawn.js` raises one somebody painted on the slice
+ * grid, and they must raise it identically or a hand-drawn `full` and
+ * `S:full,full,full` are two different blocks that look the same.
+ *
+ * The caps take `-z`/`+z` only at the block's own floor and ceiling.  An
+ * interior deck is NOT a boundary — tagging it as one would let it cancel
+ * against the block above, and a floor you can fall through is worse than a
+ * floor drawn twice.
+ */
+export function extrudePlan(m, polys, z0, z1, mat, tag) {
+  for (const poly of polys) {
+    sweep(m, poly, 'z', z0, z1, {
+      mat, tag,
+      sideA: z0 === 0 ? '-z' : null,
+      sideB: z1 === S ? '+z' : null,
+      hatch: 'v',
+    });
+  }
+}
+
 /* ---------------------------------------------------------- rectilinear -- */
 
-/** A rectangle → a closed polygon, wound CCW. */
-const rect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+/** A rectangle → a closed polygon, wound CCW.  Exported because the drawing
+ *  board writes plans as nothing but rectangles, and two definitions of a
+ *  rectangle's winding is one definition too many. */
+export const rect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
 
 /**
  * An L.  The chevron he drew in all three layers — a square with one corner

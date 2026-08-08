@@ -19,6 +19,8 @@
 //   S:bar/1,cross,full:rustic          …with a quarter-turn on the first
 //   A:y+:twin/1:stone                  an arch along y, both spandrels, on twin
 //   A:xl:corner:rustic                 half an arch along x, left hand only
+//   D:00ii,00ii,00ii:stone             a DRAWN block — three painted layers
+//   D:00i6!006in,-,-:stone             …with a ramp climbing north out of it
 //
 // Readable on purpose.  A save you can open and understand is a save you can
 // repair; the previous format was a list of opaque indices into a list that no
@@ -31,6 +33,7 @@
 // substituting something; a block that cannot be rebuilt must say so loudly.
 
 import { PLANS } from './plan.js';
+import { decodeDrawn, labelDrawn } from './drawn.js';
 
 /** Plans in a stacked block — one per third of its height.  Lives here rather
  *  than in stack.js because the GRAMMAR owns it: a recipe with the wrong number
@@ -90,6 +93,17 @@ export function decode(recipe) {
     return { ok: true, family: 'arch', axis, hand, pier, mat: parts[3], recipe };
   }
 
+  if (kind === 'D') {
+    // A DRAWING.  Its geometry is checked by drawn.js — every corner on a slice
+    // plane, no two pieces in the same place, every ramp with the floorspace to
+    // climb a storey — because those are facts about the board, not about the
+    // grammar.  What the grammar owns is the shape of the line and the material.
+    const d = decodeDrawn(recipe);
+    if (!d.ok) return d;
+    if (!MATS.includes(d.mat)) return bad(recipe, `no such material: ${d.mat}`);
+    return d;
+  }
+
   return bad(recipe, `no such block kind: ${kind}`);
 }
 
@@ -133,7 +147,7 @@ export function seedOf(recipe) {
 export function label(recipe) {
   const d = decode(recipe);
   if (!d.ok) return '?';
-  return d.family === 'arch'
-    ? `arch ${d.axis}${d.hand === 'both' ? '' : ' ' + d.hand}`
-    : d.layers.map((L) => L.id).join(' · ');
+  if (d.family === 'arch') return `arch ${d.axis}${d.hand === 'both' ? '' : ' ' + d.hand}`;
+  if (d.family === 'drawn') return labelDrawn(d);
+  return d.layers.map((L) => L.id).join(' · ');
 }

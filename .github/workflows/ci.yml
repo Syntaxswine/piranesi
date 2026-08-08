@@ -55,5 +55,9 @@ jobs:
       # And the terminal test: can the hundred actually TILE a building with
       # every seam exact?  A kit that cannot is a shelf of strangers.
       - run: node tools/assemble.mjs --w 5 --d 5 --h 3 --size 400x300 --out /tmp/asm.png
+      # THE THIRD FAMILY. `D:` blocks are drawn by hand rather than enumerated,
+      # so there is no census to diff — what CI can check is that the grammar
+      # still builds one, ramps and all, and that three in a row still meet.
+      - run: node tools/blockshot.mjs --recipes 'D:00ii,004i!609in,5eii:stone' --run 3 --size 320x280 --out /tmp/drawn.png
       # layershot is the one that would notice the layer feedback going flat.
       - run: node tools/layershot.mjs --layers 3 --layer 1 --size 320x220 --out /tmp/layers.png

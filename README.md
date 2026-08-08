@@ -184,10 +184,53 @@ reads as one barrel vault with no membranes between the bays.
 **A block's identity is its recipe**, a short readable string that fully rebuilds
 it, and a save carries the recipes it uses in its own palette. So the generator
 can be changed freely without touching anything already built. `S:ell,bar/1,frame:stone`
-is a stack of three plans; `A:y+:twin:stone` is an arch along y on twin piers.
-Adding a plan is free — no existing recipe mentions it. Renaming or removing one
-breaks every recipe that names it, and `decode` reports those rather than quietly
-substituting something.
+is a stack of three plans; `A:y+:twin:stone` is an arch along y on twin piers;
+`D:00ii,004i!609in,5eii:stone` is one somebody drew. Adding a plan is free — no
+existing recipe mentions it. Renaming or removing one breaks every recipe that
+names it, and `decode` reports those rather than quietly substituting something.
+
+---
+
+## The drawing board
+
+[`draw.html`](draw.html) — one block, three storeys, painted cell by cell on the
+cube's own slice lines.
+
+The grammar enumerates 66,920 blocks and every one of them is a choice the
+*grammar* made. This is the other half: when you want a specific piece, "which
+of the twenty-four plans is nearest?" is the wrong question. Fill the grid with
+a bucket, drag a rectangle, lay a ramp, scroll between the three layers, and
+watch the model in the corner rebuild as you go.
+
+**The board is the planes.** A cell is the gap between two adjacent slice lines
+— 2, ½, ½, 1½, 1½, ½, ½ and 2 yards across, deliberately not a uniform grid —
+so every edge lands on a slice plane by construction and there is nowhere
+illegal to put the pen. His cross-section's arcs are ruled underneath as guides,
+because they are *why* there is a plane at 2.5 at all. Simplify the ladder and
+the board gets coarser on its own; drawings keep their yards, because a recipe
+stores yards and never a cell index.
+
+**A painted region becomes a partition**, not a union — disjoint maximal
+rectangles — so the commonest way to draw a broken block is unreachable. Two
+overlapping polygons are crossed twice by the solidity ray and the overlap reads
+as *void*.
+
+**The ramp** rises one storey over a run of at least one storey — "each layer up
+is 3 yards, so it requires at least 3 yards of floorspace" — so the steepest the
+game allows is 45° and a longer run is a gentler one. It is a wedge belonging to
+the layer it climbs, which makes that rule something the grammar checks rather
+than a note in a document. Drag the way you walk up.
+
+Press **to the shelf** and the game deals the block beside the generated hand.
+The recipe is the whole document: it is what is saved, what is in the box, what
+is in the URL, and what a building carries with it.
+
+```bash
+node tools/blockshot.mjs --recipes 'D:00ii,004i!609in,5eii:stone' --run 3
+```
+
+Three of that one in a row cancel sixteen faces: the floors merge into one
+floor, the walls into one wall, and the ramps into a stair that runs.
 
 ---
 
@@ -340,7 +383,8 @@ them.
 | `tools/plateshot.mjs` | Pulls an impression headless — the real catalogue, world, camera and engraver. `--scene --eye --yaw --fov --shift --crop --passes --stats` |
 | `tools/tonecheck.mjs` | **The transfer curve.** Hatches a flat wall at known tones and measures the ink. Run it after *any* change to the hatcher, the stroke rasteriser or the register ladder. |
 | `tools/png.mjs` | Zero-dependency PNG writer. The reason the renderer never touches a canvas. |
-| `tools/snap.mjs` | Receives a PNG POSTed from the running page. |
+| `tools/serve.mjs --shots` | **Look at what the live page is drawing.** A hidden preview pane does not composite, so a screenshot of it times out — with this on, the page POSTs a canvas to `docs/shots/live/`. Loopback only, off by default. `npm run serve:shots` |
+| `tools/snap.mjs` | The same, cross-origin, on its own port. Superseded by the above for anything served from `serve.mjs`. |
 
 `tonecheck` earned its place immediately: it found that the hatcher was
 **non-monotonic** — asking for tone 0.50 produced a *lighter* plate than 0.44,
@@ -351,6 +395,9 @@ said so. It just looked like a decision somebody had made.
 
 ```
 index.html          the game
+draw.html           the drawing board — design one block by hand
+js/drawn.js         the D: family: the slice grid, the partition, the ramp
+js/draw.js          the board's shell: tools, layers, the mini screen
 js/math.js          axes, the shift projection, deterministic hashes
 js/ink.js           the plate: transmittance, strokes, paper, develop
 js/mesh.js          geometry + the per-face (u,v) frame that makes it an engraving

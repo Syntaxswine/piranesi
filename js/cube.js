@@ -119,6 +119,23 @@ export const R_WHOLE = 4.5;                             // 4.5 yd = 4.115 m, == 
 export const PLANES = [0, 2, 2.5, 3, 4.5, 6, 6.5, 7, 9];
 export const PLANES_FEET = PLANES.map((v) => v * SUB_FEET);
 
+/**
+ * THE STOREY, and THE DECKS.
+ *
+ * "vertically i stuck to just the basic 1/3rd slices for this one block."  Three
+ * yards is one storey — the height a layer of a stacked block occupies, the rise
+ * a ramp has to climb to reach the next one, and therefore the one vertical
+ * number the whole game is built on.  Finer horizontal cuts are legal (2, 2.5,
+ * 6.5 and 7 are slice planes too) but he stuck to thirds, and thirds are what
+ * make a stack read as storeys.
+ *
+ * It lives HERE and not in stack.js because three separate things now need it —
+ * the composer, the drawing board and the ramp — and a constant copied into
+ * three files is the `ell-deep` bug with a longer fuse.  See plan.js §MASS.
+ */
+export const STOREY = SUB / 3;                          // 3 yards
+export const DECKS = [0, STOREY, 2 * STOREY, SUB];      // 0, 3, 6, 9
+
 /** Snap a lattice coordinate to the nearest legal plane.  A generator should
  *  not need this — it should be built from the planes — but a snap is cheap
  *  insurance against a form drifting half an inch off the grid and quietly

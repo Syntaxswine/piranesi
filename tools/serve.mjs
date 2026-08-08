@@ -10,12 +10,28 @@
  * is refused by every browser's module loader, and the failure looks like a
  * broken game rather than a broken server.
  *
- * Usage:  node tools/serve.mjs [--port 8756] [--root .]
+ * Usage:  node tools/serve.mjs [--port 8756] [--root .] [--shots]
+ *
+ * `--shots` — THE ONE INSTRUMENT THE LIVE UI CANNOT BE CHECKED WITHOUT.
+ *
+ * A browser preview pane that is not displayed does not composite, so a
+ * screenshot of it times out; and requestAnimationFrame does not fire in a
+ * hidden tab either. Between them, "look at what the page is actually drawing"
+ * is the one thing headless verification could not do — and a drawing board is
+ * exactly the kind of thing where the numbers can all be right and the picture
+ * still be wrong. With this on, the page can POST a canvas to
+ * `docs/shots/live/<name>.png` and anything that can read a file can see it.
+ *
+ *   await fetch('/__shot', { method: 'POST',
+ *     body: JSON.stringify({ name: 'board', data: canvas.toDataURL() }) });
+ *
+ * OFF BY DEFAULT, and when it is on the server binds to loopback only: a
+ * writable endpoint has no business being reachable from the network.
  */
 
 import { createServer } from 'node:http';
 import { createReadStream, promises as fs } from 'node:fs';
-import { extname, join, resolve, sep } from 'node:path';
+import { extname, join, resolve, sep, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT_DEFAULT = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -27,6 +43,8 @@ function arg(name, dflt) {
 }
 const PORT = Number(arg('--port', process.env.PORT || 8749));
 const ROOT = resolve(arg('--root', ROOT_DEFAULT));
+const SHOTS = argv.includes('--shots');
+const SHOT_DIR = join(ROOT, 'docs', 'shots', 'live');
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -72,6 +90,8 @@ const server = createServer(async (req, res) => {
     return send(res, 400, 'bad request');
   }
 
+  if (SHOTS && req.method === 'POST' && pathname === '/__shot') return shot(req, res);
+
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return send(res, 405, 'method not allowed', { allow: 'GET, HEAD' });
   }
@@ -100,6 +120,39 @@ const server = createServer(async (req, res) => {
   }
 });
 
+/**
+ * Take one canvas off the live page and put it on disk.
+ *
+ * The name is scrubbed to a leaf and the extension comes from the data URL's
+ * own MIME type, never from the caller — the whole file path is derived here,
+ * so there is nothing for a request to point somewhere else with.
+ */
+async function shot(req, res) {
+  const chunks = [];
+  let size = 0;
+  for await (const c of req) {
+    size += c.length;
+    if (size > 24 * 1024 * 1024) { req.destroy(); return send(res, 413, 'too large'); }
+    chunks.push(c);
+  }
+  let name, data;
+  try {
+    ({ name, data } = JSON.parse(Buffer.concat(chunks).toString('utf8')));
+  } catch { return send(res, 400, 'expected {name, data}'); }
+
+  const leaf = String(name || 'shot').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').slice(0, 40) || 'shot';
+  const m = /^data:image\/(png|jpeg|webp);base64,(.*)$/s.exec(String(data || ''));
+  if (!m) return send(res, 400, 'expected a base64 data: URL for a png, jpeg or webp');
+  const file = join(SHOT_DIR, `${leaf}.${m[1] === 'jpeg' ? 'jpg' : m[1]}`);
+
+  try {
+    await fs.mkdir(dirname(file), { recursive: true });
+    await fs.writeFile(file, Buffer.from(m[2], 'base64'));
+  } catch (err) { return send(res, 500, String(err)); }
+  console.log(`  shot → ${file}`);
+  send(res, 200, file);
+}
+
 server.on('error', (err) => {
   if (err && err.code === 'EADDRINUSE') {
     console.error(`port ${PORT} is already in use — something else is serving there`);
@@ -109,7 +162,11 @@ server.on('error', (err) => {
   process.exit(1);
 });
 
-server.listen(PORT, () => {
+// A WRITABLE SERVER IS A LOOPBACK SERVER.  Without `--shots` this binds
+// wherever it likes, because it can only hand out files that are already
+// public; with it, it can be told to write one, and that stays on this machine.
+server.listen(PORT, SHOTS ? '127.0.0.1' : undefined, () => {
   console.log(`carceri: serving ${ROOT}`);
   console.log(`  http://localhost:${PORT}/`);
+  if (SHOTS) console.log(`  POST /__shot  →  ${SHOT_DIR}`);
 });
