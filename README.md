@@ -17,9 +17,11 @@ snaking through a labyrinth.
 > but three files in `js/` are dead and the published site may still be serving
 > the old game. Blocks are still plain masses wanting relief and ornament.
 >
-> **Start at [`docs/HANDOFF-2026-08-06.md`](docs/HANDOFF-2026-08-06.md).** It is
-> the keystone: what the game is, the laws, every trap already paid for, and
-> §10 for the four faults that only a measuring instrument found.
+> **Start at [`docs/HANDOFF-2026-08-07.md`](docs/HANDOFF-2026-08-07.md)** — the
+> current keystone: the grammar walked and measured, the hundred-block kit, the
+> openings, the owner's archetype spec, and every trap keyed by what you will
+> SEE when you hit it. [`HANDOFF-2026-08-06.md`](docs/HANDOFF-2026-08-06.md) is
+> still the reference for what the game IS, the renderer and the cube law.
 
 **Two modes.** *Build* is a rotatable three-quarter overhead view of the model —
 you place on one flat layer, the layer above is ghosted and the one below is
@@ -60,7 +62,7 @@ wanted for another project, and it is the more interesting renderer of the two.
 **Blocks are composed, not drawn.** A block is a **stack of plans**: three
 storeys, each a plan cut on the slice lines and extruded. You cannot hand-author
 enough Piranesi cubes to keep a builder interesting; you can compose them from
-sixteen plans forever.
+twenty-four plans forever.
 
 **The one rule that makes it assemble is the cube law.** A block is nine yards
 cubed — nine sub-blocks of one yard each — every cut falls on a slice plane, and
@@ -72,7 +74,7 @@ row of boxes. *(This supersedes the socket ladder described further down.)*
 
 ```bash
 npm run serve      # http://localhost:8749
-npm test           # 54 laws
+npm test           # 70 laws
 npm run shot       # pull an impression, headless, to docs/shots/
 ```
 
@@ -84,15 +86,15 @@ node tools/census.mjs --verify              # the self-checks only
 node tools/blockshot.mjs --recipes @docs/shelf.txt --cols 5
 ```
 
-The grammar admits **79,016 recipes → 39,508 distinct solids → 10,826 distinct
-blocks** once you take rotation as free at placement. `tools/census.mjs` walks
-all of it in four seconds, measures every block, ranks them and writes
+The grammar admits **525,056 recipes → 262,528 distinct solids → 66,920
+distinct blocks** once you take rotation as free at placement. `tools/census.mjs`
+walks all of it in under twenty seconds, measures every block, ranks them and writes
 [`docs/CENSUS.md`](docs/CENSUS.md). Read that file: it is the map of what this
 game can actually build.
 
-It also measures whether the cube law works, and it does — **10,806 of 10,826
+It also measures whether the cube law works, and it does — **66,900 of 66,920
 blocks have all four walls met exactly by some other block**, and there are only
-1,048 distinct wall patterns across the whole catalogue, which is why anything
+1,786 distinct wall patterns across the whole catalogue, which is why anything
 meets anything.
 
 Four separate measurements in it were wrong at first, all the same way: they
@@ -104,6 +106,27 @@ not a measurement.** The census now runs five self-checks each time — includin
 Burnside's lemma as an independent derivation of the orbit count — and refuses
 to write if one fails.
 
+## The openings
+
+```bash
+node tools/apertures.mjs        # docs/APERTURES.md
+```
+
+The interface is smaller than it looks. **Every opening in the grammar is a
+rectangle 3, 6 or 9 yards tall with its sill at 0, 3 or 6**, because a block is
+three plans extruded — there is no design freedom in the vertical at all. So the
+only real variable is the WORD: one storey of one wall, nine yards across. Of
+512 possible nine-bit words the whole grammar uses **fifteen**, and three of
+those occur only in arches.
+
+```
+a wall  =  three storeys, each one of twelve words
+```
+
+[`docs/APERTURES.md`](docs/APERTURES.md) has the table, which plan emits which
+word, and the cost of a word only one plan can make: a block showing `chamfer`
+reaches 29 blocks against a baseline of 239 — **8× worse**.
+
 ## The hundred
 
 ```bash
@@ -112,7 +135,7 @@ node tools/blockshot.mjs --recipes @docs/kit.txt --cols 10
 node tools/assemble.mjs --w 6 --d 6 --h 4            # build something out of them
 ```
 
-[`docs/KIT.md`](docs/KIT.md) is a **hundred-block kit** chosen from the 10,826 —
+[`docs/KIT.md`](docs/KIT.md) is a **hundred-block kit** chosen from the 66,920 —
 and deliberately *not* the top hundred by score, because high scores cluster and
 the top hundred is one idea a hundred times. It is picked from a role spec in
 [`docs/kit-spec.json`](docs/kit-spec.json) so the shape of the kit is data you
@@ -122,9 +145,9 @@ see**:
 - **It must be one thing.** Blocks are nodes, an edge is "these two can be set
   side by side flush". A first pick came back 99 of 100 blocks flush on all four
   walls — and it was *two kits*: an 87-block body and a 13-block island of
-  arches. No single block in the entire grammar touches both (403 touch the
-  island, 1,287 touch the body, intersection empty), so the fix is a two-block
-  chain found by breadth-first search over the grammar graph.
+  arches. No single block in the entire grammar touched both — measured at the
+  time: 403 touched the island, 1,287 the body, intersection empty — so the fix
+  is a two-block chain found by breadth-first search over the grammar graph.
 - **Every block must be something you can set down.** Deck joinery is far
   stricter than wall joinery — B stands on A only if B's whole floor equals A's
   whole ceiling. A hundred chosen for their walls left **17 with nothing in the
